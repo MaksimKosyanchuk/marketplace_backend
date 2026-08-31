@@ -33,6 +33,6 @@ import { UsersModule } from '../users/users.module';
     JwtStrategy,
   ],
 
-  exports: [AuthService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

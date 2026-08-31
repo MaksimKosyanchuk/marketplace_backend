@@ -35,9 +35,6 @@ export class CartService {
   async addItem(userId: string, dto: AddToCartDto) {
     const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
     if (!product) throw new NotFoundException('Product not found');
-    if (product.stock < dto.quantity) {
-      throw new BadRequestException(`Only ${product.stock} item(s) left in stock`);
-    }
 
     const cart = await this.getOrCreateCart(userId);
 
@@ -45,11 +42,18 @@ export class CartService {
       where: { cartId_productId: { cartId: cart.id, productId: dto.productId } },
     });
 
+    // Рахуємо, скільки буде ВЕСЬ товар у кошику після додавання
+    const currentInCart = existingItem ? existingItem.quantity : 0;
+    const newQuantity = currentInCart + dto.quantity;
+
+    // Тільки ОДНА перевірка залишку на складі:
+    if (product.stock < newQuantity) {
+      throw new BadRequestException(
+        `Only ${product.stock} item(s) left in stock. You already have ${currentInCart} in cart.`
+      );
+    }
+
     if (existingItem) {
-      const newQuantity = existingItem.quantity + dto.quantity;
-      if (product.stock < newQuantity) {
-        throw new BadRequestException(`Only ${product.stock} item(s) left in stock`);
-      }
       return this.prisma.cartItem.update({
         where: { id: existingItem.id },
         data: { quantity: newQuantity },
@@ -58,7 +62,11 @@ export class CartService {
     }
 
     return this.prisma.cartItem.create({
-      data: { cartId: cart.id, productId: dto.productId, quantity: dto.quantity },
+      data: {
+        cartId: cart.id,
+        productId: dto.productId,
+        quantity: dto.quantity,
+      },
       include: { product: true },
     });
   }
@@ -89,7 +97,6 @@ export class CartService {
     return { success: true };
   }
 
-  // защита от изменения чужого cart item (edge-кейс из спеки)
   private async findOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.cartItem.findUnique({
       where: { id: itemId },
@@ -97,7 +104,7 @@ export class CartService {
     });
     if (!item) throw new NotFoundException('Cart item not found');
     if (item.cart.userId !== userId) {
-      throw new NotFoundException('Cart item not found'); // намеренно 404, а не 403 — не палим существование чужого item'а
+      throw new NotFoundException('Cart item not found');
     }
     return item;
   }
