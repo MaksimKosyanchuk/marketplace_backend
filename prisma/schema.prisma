@@ -68,6 +68,8 @@ model Product {
   imageUrl    String?
   categoryId  String
 
+  isArchived  Boolean  @default(false)
+
   category    Category    @relation(fields: [categoryId], references: [id])
 
   cartItems   CartItem[]

@@ -24,7 +24,9 @@ export class ProductsService {
 
     const { search, categoryId, minPrice, maxPrice, sort, page, limit } = query;
 
+    // Учитываем только НЕ заархивированные товары
     const where: Prisma.ProductWhereInput = {
+      isArchived: false,
       ...(search && { name: { contains: search, mode: 'insensitive' } }),
       ...(categoryId && { categoryId }),
       ...((minPrice !== undefined || maxPrice !== undefined) && {
@@ -65,7 +67,11 @@ export class ProductsService {
       where: { id },
       include: { category: true },
     });
-    if (!product) throw new NotFoundException('Product not found');
+
+    if (!product || product.isArchived) {
+      throw new NotFoundException('Product not found');
+    }
+
     return product;
   }
 
@@ -73,15 +79,13 @@ export class ProductsService {
     try {
       await this.ensureCategoryExists(dto.categoryId);
 
-      // Извлекаем лишнее поле image (чтобы не передавать его в Prisma)
       const { image, ...productData } = dto;
-
       const imageUrl = uploadedFilePath ?? dto.imageUrl ?? null;
 
       const product = await this.prisma.product.create({
         data: {
           ...productData,
-          description: dto.description ?? '', // Защита от undefined для Prisma
+          description: dto.description ?? '',
           imageUrl,
         },
       });
@@ -103,7 +107,6 @@ export class ProductsService {
       await this.ensureCategoryExists(dto.categoryId);
     }
 
-    // Извлекаем лишнее поле image
     const { image, ...productData } = dto;
 
     let newImageUrl = existingProduct.imageUrl;
@@ -141,14 +144,16 @@ export class ProductsService {
   }
 
   async remove(id: string) {
-    const product = await this.findOne(id);
+    // Проверяем существование товара перед архивацией
+    await this.findOne(id);
 
-    await this.prisma.product.delete({ where: { id } });
+    // Вместо удаления делаем архивацию (Soft Delete)
+    await this.prisma.product.update({
+      where: { id },
+      data: { isArchived: true },
+    });
 
-    // После успешного удаления из БД очищаем файл с диска
-    if (product.imageUrl) {
-      await deleteFile(product.imageUrl);
-    }
+    // Фото на диске НЕ удаляем, так как оно может отображаться в старых заказах покупателей
 
     await this.invalidateCache();
     return { success: true };
