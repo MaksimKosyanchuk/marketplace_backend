@@ -1,4 +1,3 @@
-// products.service.ts
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -6,11 +5,12 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductSort, QueryProductDto } from './dto/query-product.dto';
 import { Prisma } from '@prisma/client';
+import { deleteFile } from '../common/utils/file';
 
 @Injectable()
 export class ProductsService {
   private readonly CACHE_PREFIX = 'products:list:';
-  private readonly CACHE_TTL = 60; // сек
+  private readonly CACHE_TTL = 60; // секунды
 
   constructor(
     private prisma: PrismaService,
@@ -38,7 +38,7 @@ export class ProductsService {
     const orderBy: Prisma.ProductOrderByWithRelationInput =
       sort === ProductSort.PRICE_ASC ? { price: 'asc' } :
       sort === ProductSort.PRICE_DESC ? { price: 'desc' } :
-      { createdAt: 'desc' }; // newest по умолчанию
+      { createdAt: 'desc' };
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
@@ -69,29 +69,87 @@ export class ProductsService {
     return product;
   }
 
-  async create(dto: CreateProductDto) {
-    await this.ensureCategoryExists(dto.categoryId);
+  async create(dto: CreateProductDto, uploadedFilePath?: string) {
+    try {
+      await this.ensureCategoryExists(dto.categoryId);
 
-    const product = await this.prisma.product.create({ data: dto });
-    await this.invalidateCache();
-    return product;
+      // Извлекаем лишнее поле image (чтобы не передавать его в Prisma)
+      const { image, ...productData } = dto;
+
+      const imageUrl = uploadedFilePath ?? dto.imageUrl ?? null;
+
+      const product = await this.prisma.product.create({
+        data: {
+          ...productData,
+          description: dto.description ?? '', // Защита от undefined для Prisma
+          imageUrl,
+        },
+      });
+
+      await this.invalidateCache();
+      return product;
+    } catch (error) {
+      if (uploadedFilePath) {
+        await deleteFile(uploadedFilePath);
+      }
+      throw error;
+    }
   }
 
-  async update(id: string, dto: UpdateProductDto) {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateProductDto, uploadedFilePath?: string) {
+    const existingProduct = await this.findOne(id);
 
     if (dto.categoryId) {
       await this.ensureCategoryExists(dto.categoryId);
     }
 
-    const product = await this.prisma.product.update({ where: { id }, data: dto });
-    await this.invalidateCache();
-    return product;
+    // Извлекаем лишнее поле image
+    const { image, ...productData } = dto;
+
+    let newImageUrl = existingProduct.imageUrl;
+    let isImageChanged = false;
+
+    if (uploadedFilePath) {
+      newImageUrl = uploadedFilePath;
+      isImageChanged = true;
+    } else if (dto.imageUrl !== undefined) {
+      newImageUrl = dto.imageUrl;
+      isImageChanged = dto.imageUrl !== existingProduct.imageUrl;
+    }
+
+    try {
+      const updatedProduct = await this.prisma.product.update({
+        where: { id },
+        data: {
+          ...productData,
+          imageUrl: newImageUrl,
+        },
+      });
+
+      if (isImageChanged && existingProduct.imageUrl && existingProduct.imageUrl !== newImageUrl) {
+        await deleteFile(existingProduct.imageUrl);
+      }
+
+      await this.invalidateCache();
+      return updatedProduct;
+    } catch (error) {
+      if (uploadedFilePath) {
+        await deleteFile(uploadedFilePath);
+      }
+      throw error;
+    }
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const product = await this.findOne(id);
+
     await this.prisma.product.delete({ where: { id } });
+
+    // После успешного удаления из БД очищаем файл с диска
+    if (product.imageUrl) {
+      await deleteFile(product.imageUrl);
+    }
+
     await this.invalidateCache();
     return { success: true };
   }
@@ -103,6 +161,8 @@ export class ProductsService {
 
   private async invalidateCache() {
     const keys = await this.redis.keys(this.CACHE_PREFIX + '*');
-    await this.redis.del(...keys);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
   }
 }
