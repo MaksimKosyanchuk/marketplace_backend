@@ -8,6 +8,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { CartModule } from './cart/cart.module';
 
 
 @Module({
@@ -24,6 +25,8 @@ import { join } from 'path';
     CategoriesModule,
 
     ProductsModule,
+
+    CartModule,
   ],
 
   controllers: [AppController],
