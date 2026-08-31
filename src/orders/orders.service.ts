@@ -1,13 +1,18 @@
+// orders.service.ts
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
+import { QueryOrderDto } from './dto/query-order.dto';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService, @InjectQueue('orders') private ordersQueue: Queue,) {}
+  constructor(
+    private prisma: PrismaService,
+    @InjectQueue('orders') private ordersQueue: Queue,
+  ) {}
 
   async checkout(userId: string) {
     const cart = await this.prisma.cart.findUnique({ where: { userId } });
@@ -52,7 +57,7 @@ export class OrdersService {
       const newOrder = await tx.order.create({
         data: {
           userId,
-          status: OrderStatus.NEW,
+          status: OrderStatus.NEW, // заказ создан, ждёт оплаты
           totalAmount,
           items: { createMany: { data: orderItemsData } },
         },
@@ -64,11 +69,106 @@ export class OrdersService {
       return newOrder;
     });
 
-    // ВАЖНО: задача в очередь кладётся ПОСЛЕ успешного коммита транзакции,
-    // а не внутри неё — иначе воркер может забрать задачу раньше, чем БД зафиксирует изменения
+    return order;
+  }
+
+  async payOrder(userId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.userId !== userId) {
+      throw new ForbiddenException('You do not have access to this order');
+    }
+
+    if (order.status !== OrderStatus.NEW) {
+      throw new BadRequestException(`Order is already ${order.status.toLowerCase()}, cannot pay again`);
+    }
+
+    const payment = this.mockChargePayment(order.totalAmount);
+
+    if (!payment.success) {
+      await this.cancelAndRestock(orderId);
+      throw new BadRequestException('Payment failed, order cancelled and stock restored');
+    }
+
     await this.ordersQueue.add('process-order', { orderId: order.id });
 
-    return order;
+    return { success: true, orderId: order.id, transactionId: payment.transactionId };
+  }
+
+  private mockChargePayment(amount: Prisma.Decimal): { success: boolean; transactionId: string } {
+
+    return { success: true, transactionId: `mock_${Date.now()}` };
+  }
+
+  private mockRefundPayment(amount: Prisma.Decimal): { success: boolean; refundId: string } {
+    return { success: true, refundId: `refund_${Date.now()}` };
+  }
+
+  async cancelOrder(userId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.userId !== userId) {
+      throw new ForbiddenException('You do not have access to this order');
+    }
+
+    return this.finalizeCancellation(order);
+  }
+
+  // общая логика отмены — переиспользуется и для юзера, и для провала оплаты
+  private async finalizeCancellation(order: Prisma.OrderGetPayload<{ include: { items: true } }>) {
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order is already cancelled');
+    }
+    if (order.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException('Cannot cancel a completed order');
+    }
+
+    // если заказ был уже оплачен (не NEW) — делаем мок-возврат средств
+    let refund: { success: boolean; refundId: string } | null = null;
+    if (order.status !== OrderStatus.NEW) {
+      refund = this.mockRefundPayment(order.totalAmount);
+      if (!refund.success) {
+        throw new BadRequestException('Refund failed, please contact support');
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: { status: OrderStatus.CANCELLED },
+        include: { items: true },
+      });
+    });
+
+    return { order: updated, refund };
+  }
+
+  private async cancelAndRestock(orderId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+      if (!order) return;
+
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+
+      await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.CANCELLED } });
+    });
   }
 
   async findMyOrders(userId: string) {
@@ -86,7 +186,6 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
-    // Customer может смотреть только свои заказы, Admin — любые
     if (userRole !== Role.ADMIN && order.userId !== userId) {
       throw new ForbiddenException('You do not have access to this order');
     }
@@ -94,20 +193,68 @@ export class OrdersService {
     return order;
   }
 
-  async findAll() {
-    return this.prisma.order.findMany({
-      include: { items: true, user: { select: { id: true, email: true, nickName: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(query: QueryOrderDto) {
+    const { status, page, limit } = query;
+
+    const where: Prisma.OrderWhereInput = {
+      ...(status && { status }),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        include: { items: true, user: { select: { id: true, email: true, nickName: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: { total, page, limit, pageCount: Math.ceil(total / limit) },
+    };
   }
 
   async updateStatus(orderId: string, dto: UpdateOrderStatusDto) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
     if (!order) throw new NotFoundException('Order not found');
 
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: dto.status },
+    if (order.status === dto.status) {
+      return order; // статус не изменился — ничего не делаем
+    }
+
+    if (dto.status === OrderStatus.CANCELLED) {
+      const { order: cancelled } = await this.finalizeCancellation(order);
+      return cancelled;
+    }
+
+    if (order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot change status of an already ${order.status.toLowerCase()} order`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // если отменяем — возвращаем сток на склад
+      if (dto.status === OrderStatus.CANCELLED) {
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+      }
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { status: dto.status },
+        include: { items: true },
+      });
     });
   }
 }
