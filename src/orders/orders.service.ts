@@ -11,6 +11,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { QueryOrderDto } from './dto/query-order.dto';
 import { LoggerService } from '../logger/logger.service';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class OrdersService {
@@ -18,6 +19,7 @@ export class OrdersService {
         private prisma: PrismaService,
         @InjectQueue('orders') private ordersQueue: Queue,
         private logger: LoggerService,
+        private redis: RedisService,
     ) {}
 
     async checkout(userId: string) {
@@ -77,6 +79,8 @@ export class OrdersService {
 
             return newOrder;
         });
+
+        await this.redis.delByPattern(`products:list:*`);
 
         await this.logger.log(
             OrdersService.name,
@@ -218,6 +222,8 @@ export class OrdersService {
             });
         });
 
+        await this.redis.delByPattern(`products:list:*`);
+
         return { order: updated, refund };
     }
 
@@ -241,6 +247,8 @@ export class OrdersService {
                 data: { status: OrderStatus.CANCELLED },
             });
         });
+
+        await this.redis.delByPattern(`products:list:*`);
     }
 
     async findMyOrders(userId: string) {

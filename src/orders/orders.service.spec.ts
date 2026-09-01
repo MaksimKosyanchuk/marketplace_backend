@@ -9,6 +9,7 @@ import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import { LoggerService } from '../logger/logger.service';
+import { RedisService } from '../redis/redis.service';
 
 describe('OrdersService', () => {
     let service: OrdersService;
@@ -93,6 +94,12 @@ describe('OrdersService', () => {
                         warn: jest.fn(),
                         debug: jest.fn(),
                         verbose: jest.fn(),
+                    },
+                },
+                {
+                    provide: RedisService,
+                    useValue: {
+                        delByPattern: jest.fn().mockResolvedValue(1),
                     },
                 },
                 {
