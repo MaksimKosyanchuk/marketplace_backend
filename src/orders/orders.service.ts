@@ -119,7 +119,6 @@ export class OrdersService {
     return this.finalizeCancellation(order);
   }
 
-  // общая логика отмены — переиспользуется и для юзера, и для провала оплаты
   private async finalizeCancellation(order: Prisma.OrderGetPayload<{ include: { items: true } }>) {
     if (order.status === OrderStatus.CANCELLED) {
       throw new BadRequestException('Order is already cancelled');
@@ -222,39 +221,67 @@ export class OrdersService {
       where: { id: orderId },
       include: { items: true },
     });
-    if (!order) throw new NotFoundException('Order not found');
 
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // 1. Нельзя перевести обратно в NEW
+    if (dto.status === OrderStatus.NEW) {
+      throw new BadRequestException('Cannot manually set status back to NEW');
+    }
+
+    // 2. Если статус не меняется — возвращаем как есть
     if (order.status === dto.status) {
-      return order; // статус не изменился — ничего не делаем
+      return order;
     }
 
-    if (dto.status === OrderStatus.CANCELLED) {
-      const { order: cancelled } = await this.finalizeCancellation(order);
-      return cancelled;
-    }
-
-    if (order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED) {
+    // 3. Завершенный или отмененный заказ менять нельзя
+    if (
+      order.status === OrderStatus.CANCELLED ||
+      order.status === OrderStatus.COMPLETED
+    ) {
       throw new BadRequestException(
         `Cannot change status of an already ${order.status.toLowerCase()} order`,
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // если отменяем — возвращаем сток на склад
-      if (dto.status === OrderStatus.CANCELLED) {
+    // 4. Если заказ NEW (неоплачен) — его можно только CANCELLED
+    if (order.status === OrderStatus.NEW && dto.status !== OrderStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Unpaid order (NEW) can only be set to CANCELLED',
+      );
+    }
+
+    // 5. Обработка отмены
+    if (dto.status === OrderStatus.CANCELLED) {
+      const isPaid = order.status !== OrderStatus.NEW;
+
+      if (isPaid) {
+        this.mockRefundPayment(order.totalAmount);
+      }
+
+      return this.prisma.$transaction(async (tx) => {
         for (const item of order.items) {
           await tx.product.update({
             where: { id: item.productId },
             data: { stock: { increment: item.quantity } },
           });
         }
-      }
 
-      return tx.order.update({
-        where: { id: orderId },
-        data: { status: dto.status },
-        include: { items: true },
+        return tx.order.update({
+          where: { id: orderId },
+          data: { status: OrderStatus.CANCELLED },
+          include: { items: true },
+        });
       });
+    }
+
+    // 6. Смена на остальные статусы (PROCESSING, SHIPPED, COMPLETED и т.д.)
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: dto.status },
+      include: { items: true },
     });
   }
 }
