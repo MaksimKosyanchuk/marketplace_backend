@@ -1,12 +1,12 @@
-// categories.service.ts
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class CategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private redis: RedisService) {}
 
   async create(dto: CreateCategoryDto) {
     const exists = await this.prisma.category.findUnique({ where: { name: dto.name } });
@@ -26,12 +26,13 @@ export class CategoriesService {
 
   async update(id: string, dto: UpdateCategoryDto) {
     await this.findOne(id);
-    return this.prisma.category.update({ where: { id }, data: dto });
+    const updatedCategory = await this.prisma.category.update({ where: { id }, data: dto });
+    await this.redis.delByPattern(`products:list:*`);
+    return updatedCategory;
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    // защитить от удаления категории, к которой привязаны товары
     const productsCount = await this.prisma.product.count({ where: { categoryId: id } });
     if (productsCount > 0) {
       throw new ConflictException('Cannot delete category with existing products');

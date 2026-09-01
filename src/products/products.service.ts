@@ -98,7 +98,7 @@ export class ProductsService {
         },
       });
 
-      await this.invalidateCache();
+      await this.redis.delByPattern(`products:list:*`);
       return product;
     } catch (error) {
       if (uploadedFilePath) {
@@ -141,7 +141,7 @@ export class ProductsService {
         await deleteFile(existingProduct.imageUrl);
       }
 
-      await this.invalidateCache();
+      await this.redis.delByPattern(`products:list:*`);
       return updatedProduct;
     } catch (error) {
       if (uploadedFilePath) {
@@ -152,30 +152,19 @@ export class ProductsService {
   }
 
   async remove(id: string) {
-    // Проверяем существование товара перед архивацией
     await this.findOne(id);
 
-    // Вместо удаления делаем архивацию (Soft Delete)
     await this.prisma.product.update({
       where: { id },
       data: { isArchived: true },
     });
 
-    // Фото на диске НЕ удаляем, так как оно может отображаться в старых заказах покупателей
-
-    await this.invalidateCache();
+    await this.redis.delByPattern(`products:list:*`);
     return { success: true };
   }
 
   private async ensureCategoryExists(categoryId: string) {
     const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
     if (!category) throw new BadRequestException('Category not found');
-  }
-
-  private async invalidateCache() {
-    const keys = await this.redis.keys(this.CACHE_PREFIX + '*');
-    if (keys.length > 0) {
-      await this.redis.del(...keys);
-    }
   }
 }
