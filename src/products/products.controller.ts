@@ -59,4 +59,11 @@ export class ProductsController {
   remove(@Param('id') id: string) {
     return this.productsService.remove(id);
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Patch(':id/restore')
+  async restore(@Param('id') id: string) {
+    return this.productsService.restore(id);
+  }
 }

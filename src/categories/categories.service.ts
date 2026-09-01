@@ -33,7 +33,7 @@ export class CategoriesService {
 
   async remove(id: string) {
     await this.findOne(id);
-    const productsCount = await this.prisma.product.count({ where: { categoryId: id } });
+    const productsCount = await this.prisma.product.count({ where: { categoryId: id, isArchived: false } });
     if (productsCount > 0) {
       throw new ConflictException('Cannot delete category with existing products');
     }

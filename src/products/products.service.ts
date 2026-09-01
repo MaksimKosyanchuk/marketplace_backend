@@ -154,17 +154,37 @@ export class ProductsService {
   async remove(id: string) {
     await this.findOne(id);
 
-    await this.prisma.product.update({
-      where: { id },
-      data: { isArchived: true },
-    });
+    await this.prisma.$transaction([
+      this.prisma.product.update({
+        where: { id },
+        data: { isArchived: true },
+      }),
+
+      this.prisma.cartItem.deleteMany({
+        where: { productId: id },
+      }),
+    ]);
 
     await this.redis.delByPattern(`products:list:*`);
+    await this.redis.delByPattern(`cart:*`);
+
     return { success: true };
   }
 
   private async ensureCategoryExists(categoryId: string) {
     const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
     if (!category) throw new BadRequestException('Category not found');
+  }
+
+  async restore(id: string) {
+    await this.findOne(id);
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: { isArchived: false },
+    });
+
+    await this.redis.delByPattern(`products:list:*`);
+    return product;
   }
 }
