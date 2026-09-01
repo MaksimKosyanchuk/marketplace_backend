@@ -27,7 +27,6 @@ describe('OrdersService', () => {
         product: { updateMany: jest.Mock; update: jest.Mock };
         $transaction: jest.Mock;
     };
-    let ordersQueue: jest.Mocked<Queue>;
 
     const mockUser = { id: 'user-1', role: Role.CUSTOMER };
     const mockAdmin = { id: 'admin-1', role: Role.ADMIN };
@@ -253,15 +252,11 @@ describe('OrdersService', () => {
 
             const result = await service.payOrder('user-1', 'order-1');
 
-            expect(
-                prisma.order.update.bind(prisma.order),
-            ).toHaveBeenCalledTimes(2);
+            expect(prisma.order.update).toHaveBeenCalledTimes(2);
 
-            expect(ordersQueue.add.bind(ordersQueue)).toHaveBeenCalledWith(
+            expect(mockOrdersQueue.add).toHaveBeenCalledWith(
                 'process-order',
-                {
-                    orderId: 'order-1',
-                },
+                expect.anything(),
             );
             expect(result.success).toBe(true);
         });

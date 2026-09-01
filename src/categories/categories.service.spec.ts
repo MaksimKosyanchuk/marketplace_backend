@@ -156,9 +156,9 @@ describe('CategoriesService', () => {
         it('should update category and clear redis cache pattern', async () => {
             const dto = { name: 'Tech Gadgets' };
 
-            const mockCategory = {
+            const updatedCategory: Prisma.Category = {
                 id: 'cat-1',
-                name: 'Electronics',
+                name: 'Tech Gadgets',
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
