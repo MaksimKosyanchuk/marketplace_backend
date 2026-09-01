@@ -151,9 +151,10 @@ export class ProductsService {
                 await deleteFile(existingProduct.imageUrl);
             }
 
-            await this.redis.delByPattern(`products:list:*`);
+            await this.redis.delByPattern('products:list:*');
             return updatedProduct;
         } catch (error) {
+            // Обязательно await! Без await промис теряется в памяти и роняет Node.js v26
             if (uploadedFilePath) {
                 await deleteFile(uploadedFilePath);
             }

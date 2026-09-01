@@ -1,4 +1,3 @@
-// cart.service.ts
 import {
     BadRequestException,
     Injectable,
@@ -50,11 +49,9 @@ export class CartService {
             },
         });
 
-        // Рахуємо, скільки буде ВЕСЬ товар у кошику після додавання
         const currentInCart = existingItem ? existingItem.quantity : 0;
         const newQuantity = currentInCart + dto.quantity;
 
-        // Тільки ОДНА перевірка залишку на складі:
         if (product.stock < newQuantity) {
             throw new BadRequestException(
                 `Only ${product.stock} item(s) left in stock. You already have ${currentInCart} in cart.`,

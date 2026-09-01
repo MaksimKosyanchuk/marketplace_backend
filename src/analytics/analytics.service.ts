@@ -52,7 +52,6 @@ export class AnalyticsService {
         const dateFilter = this.buildDateFilter(dto.from, dto.to);
         const paidStatuses = this.getPaidStatuses();
 
-        // 1. KPI Summary
         const summaryAgg = await this.prisma.order.aggregate({
             where: {
                 ...dateFilter,
@@ -67,7 +66,6 @@ export class AnalyticsService {
         const averageOrderValue =
             totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-        // 2. Top 5 Products
         const topItems = await this.prisma.orderItem.groupBy({
             by: ['productId', 'productName'],
             where: {
@@ -95,7 +93,6 @@ export class AnalyticsService {
             totalRevenue: Number(item._sum.price || 0),
         }));
 
-        // 3. Sales Timeline
         const orders = await this.prisma.order.findMany({
             where: {
                 ...dateFilter,

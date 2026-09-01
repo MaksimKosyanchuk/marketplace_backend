@@ -90,6 +90,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(@nestjs|bullmq|ioredis)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

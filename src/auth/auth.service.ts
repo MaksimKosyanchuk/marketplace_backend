@@ -82,7 +82,6 @@ export class AuthService {
             throw new UnauthorizedException('Invalid refresh token');
         }
 
-        // Rotate refresh token
         await this.prisma.refreshToken.delete({
             where: { id: stored.id },
         });
