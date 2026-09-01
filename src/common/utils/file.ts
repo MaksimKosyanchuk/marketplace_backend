@@ -12,7 +12,6 @@ export async function deleteFile(relativePath?: string | null): Promise<void> {
     try {
         await fs.unlink(absolutePath);
     } catch (err) {
-        // Игнорируем ошибку ENOENT (файл и так не найден на диске)
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
             console.error(`Failed to delete file at ${absolutePath}:`, err);
         }
