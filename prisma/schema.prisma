@@ -21,6 +21,18 @@ enum OrderStatus {
   CANCELLED
 }
 
+model Log {
+  id        String   @id @default(uuid())
+  level     String
+  context   String
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([level])
+}
+
 model User {
   id            String         @id @default(uuid())
   email         String         @unique

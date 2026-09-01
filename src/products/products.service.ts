@@ -10,15 +10,17 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductSort, QueryProductDto } from './dto/query-product.dto';
 import { Prisma } from '@prisma/client';
 import { deleteFile } from '../common/utils/file';
+import { LoggerService } from '../logger/logger.service';
 
 @Injectable()
 export class ProductsService {
     private readonly CACHE_PREFIX = 'products:list:';
-    private readonly CACHE_TTL = 60; // секунды
+    private readonly CACHE_TTL = 60;
 
     constructor(
         private prisma: PrismaService,
         private redis: RedisService,
+        private logger: LoggerService,
     ) {}
 
     async findAll(query: QueryProductDto) {
@@ -105,6 +107,12 @@ export class ProductsService {
             });
 
             await this.redis.delByPattern(`products:list:*`);
+
+            await this.logger.log(
+                ProductsService.name,
+                `Product created: ${product.id}`,
+                { productName: product.name }
+            );
             return product;
         } catch (error) {
             if (uploadedFilePath) {
@@ -152,9 +160,13 @@ export class ProductsService {
             }
 
             await this.redis.delByPattern('products:list:*');
+            await this.logger.log(
+                ProductsService.name,
+                `Product updated: ${updatedProduct.id}`,
+                { productName: updatedProduct.name }
+            );
             return updatedProduct;
         } catch (error) {
-            // Обязательно await! Без await промис теряется в памяти и роняет Node.js v26
             if (uploadedFilePath) {
                 await deleteFile(uploadedFilePath);
             }
@@ -179,6 +191,11 @@ export class ProductsService {
         await this.redis.delByPattern(`products:list:*`);
         await this.redis.delByPattern(`cart:*`);
 
+        await this.logger.log(
+            ProductsService.name,
+            `Product archived: ${id}`
+        );
+
         return { success: true };
     }
 
@@ -198,6 +215,11 @@ export class ProductsService {
         });
 
         await this.redis.delByPattern(`products:list:*`);
+
+        await this.logger.log(
+            ProductsService.name,
+            `Product restored: ${product.id}`,
+        );
         return product;
     }
 }

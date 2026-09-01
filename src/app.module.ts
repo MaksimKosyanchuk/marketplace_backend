@@ -12,6 +12,7 @@ import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
 import { QueueModule } from './queue/queue.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { LoggerModule } from './logger/logger.module';
 
 @Module({
     imports: [
@@ -35,6 +36,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
         QueueModule,
 
         AnalyticsModule,
+
+        LoggerModule,
     ],
 
     controllers: [AppController],

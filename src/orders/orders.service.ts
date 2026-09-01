@@ -10,12 +10,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { QueryOrderDto } from './dto/query-order.dto';
+import { LoggerService } from '../logger/logger.service';
 
 @Injectable()
 export class OrdersService {
     constructor(
         private prisma: PrismaService,
         @InjectQueue('orders') private ordersQueue: Queue,
+        private logger: LoggerService,
     ) {}
 
     async checkout(userId: string) {
@@ -76,6 +78,12 @@ export class OrdersService {
             return newOrder;
         });
 
+        await this.logger.log(
+            OrdersService.name,
+            `Order created: ${order.id}`,
+            { userId, totalAmount: order.totalAmount }
+        );
+
         return order;
     }
 
@@ -118,6 +126,12 @@ export class OrdersService {
 
         await this.ordersQueue.add('process-order', { orderId: order.id });
 
+        await this.logger.log(
+            OrdersService.name,
+            `Order payment processed and status changed to PROCESSING: ${order.id}`,
+            { transactionId: payment.transactionId }
+        );
+
         return {
             success: true,
             orderId: order.id,
@@ -158,7 +172,15 @@ export class OrdersService {
             );
         }
 
-        return this.finalizeCancellation(order);
+        const result = await this.finalizeCancellation(order);
+
+        await this.logger.log(
+            OrdersService.name,
+            `Order cancelled by user: ${order.id}`,
+            { userId }
+        );
+
+        return result;
     }
 
     private async finalizeCancellation(
@@ -320,13 +342,25 @@ export class OrdersService {
         }
 
         if (dto.status === OrderStatus.CANCELLED) {
-            return (await this.finalizeCancellation(order)).order;
+            const result = (await this.finalizeCancellation(order)).order;
+            await this.logger.log(
+                OrdersService.name,
+                `Order status updated to CANCELLED: ${orderId}`
+            );
+            return result;
         }
 
-        return this.prisma.order.update({
+        const updatedOrder = await this.prisma.order.update({
             where: { id: orderId },
             data: { status: dto.status },
             include: { items: true },
         });
+
+        await this.logger.log(
+            OrdersService.name,
+            `Order status updated to ${dto.status}: ${orderId}`
+        );
+
+        return updatedOrder;
     }
 }
