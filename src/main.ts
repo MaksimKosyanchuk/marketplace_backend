@@ -7,8 +7,14 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const port = process.env.PORT ?? 3001;
+    const clientUrl = process.env.CLIENT_URL;
+    const port = process.env.PORT;
+
+    if (!clientUrl || !port) {
+        throw new Error(
+            'CLIENT_URL and PORT environment variables must be defined',
+        );
+    }
 
     app.enableCors({
         origin: [clientUrl],
