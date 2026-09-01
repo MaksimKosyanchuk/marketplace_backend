@@ -22,11 +22,19 @@ export class ProductsService {
     const cached = await this.redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    const { search, categoryId, minPrice, maxPrice, sort, page, limit } = query;
+    const {
+      search,
+      categoryId,
+      minPrice,
+      maxPrice,
+      sort,
+      page,
+      limit,
+      includeArchived,
+    } = query;
 
-    // Учитываем только НЕ заархивированные товары
     const where: Prisma.ProductWhereInput = {
-      isArchived: false,
+      ...(!includeArchived && { isArchived: false }),
       ...(search && { name: { contains: search, mode: 'insensitive' } }),
       ...(categoryId && { categoryId }),
       ...((minPrice !== undefined || maxPrice !== undefined) && {
@@ -68,7 +76,7 @@ export class ProductsService {
       include: { category: true },
     });
 
-    if (!product || product.isArchived) {
+    if (!product) {
       throw new NotFoundException('Product not found');
     }
 

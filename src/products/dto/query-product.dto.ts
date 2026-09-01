@@ -1,6 +1,6 @@
 // query-product.dto.ts
-import { IsOptional, IsString, IsUUID, IsNumber, Min, IsIn, IsInt, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsUUID, IsNumber, Min, IsIn, IsInt, Max, IsBoolean } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export enum ProductSort {
   PRICE_ASC = 'price_asc',
@@ -45,4 +45,9 @@ export class QueryProductDto {
   @IsInt()
   @Min(1)
   limit: number = 10;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeArchived?: boolean;
 }
