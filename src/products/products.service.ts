@@ -16,7 +16,7 @@ interface ProductWithCategory {
     id: string;
     name: string;
     description: string;
-    price: any; // Изменили с number на any или Prisma.Decimal для совместимости с Prisma
+    price: any;
     stock: number;
     imageUrl: string | null;
     isArchived: boolean;
