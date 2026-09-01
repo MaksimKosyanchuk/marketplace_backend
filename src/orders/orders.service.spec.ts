@@ -10,10 +10,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import { LoggerService } from '../logger/logger.service';
 import { RedisService } from '../redis/redis.service';
-import { Queue } from 'bullmq';
 
 describe('OrdersService', () => {
     let service: OrdersService;
+
     let prisma: {
         cart: { findUnique: jest.Mock };
         cartItem: { findMany: jest.Mock; deleteMany: jest.Mock };
@@ -28,10 +28,21 @@ describe('OrdersService', () => {
         $transaction: jest.Mock;
     };
 
-    const mockUser = { id: 'user-1', role: Role.CUSTOMER };
-    const mockAdmin = { id: 'admin-1', role: Role.ADMIN };
+    const mockUser = {
+        id: 'user-1',
+        role: Role.CUSTOMER,
+    };
 
-    const mockCart = { id: 'cart-1', userId: 'user-1' };
+    const mockAdmin = {
+        id: 'admin-1',
+        role: Role.ADMIN,
+    };
+
+    const mockCart = {
+        id: 'cart-1',
+        userId: 'user-1',
+    };
+
     const mockProduct = {
         id: 'product-1',
         name: 'Laptop',
@@ -86,8 +97,10 @@ describe('OrdersService', () => {
         $transaction: jest.fn(),
     };
 
+    const mockAdd = jest.fn();
+
     const mockOrdersQueue = {
-        add: jest.fn(),
+        add: mockAdd,
     };
 
     beforeEach(async () => {
@@ -122,10 +135,10 @@ describe('OrdersService', () => {
         }).compile();
 
         service = module.get<OrdersService>(OrdersService);
+
         prisma = module.get<PrismaService>(
             PrismaService,
         ) as unknown as typeof prisma;
-        ordersQueue = module.get<jest.Mocked<Queue>>(getQueueToken('orders'));
 
         jest.clearAllMocks();
     });
@@ -159,9 +172,15 @@ describe('OrdersService', () => {
             prisma.$transaction.mockImplementation(
                 async (
                     cb: (tx: {
-                        product: { updateMany: jest.Mock };
-                        order: { create: jest.Mock };
-                        cartItem: { deleteMany: jest.Mock };
+                        product: {
+                            updateMany: jest.Mock;
+                        };
+                        order: {
+                            create: jest.Mock;
+                        };
+                        cartItem: {
+                            deleteMany: jest.Mock;
+                        };
                     }) => Promise<unknown>,
                 ) => {
                     const tx = {
@@ -179,6 +198,7 @@ describe('OrdersService', () => {
                                 .mockResolvedValue({ count: 1 }),
                         },
                     };
+
                     return cb(tx);
                 },
             );
@@ -195,7 +215,9 @@ describe('OrdersService', () => {
             prisma.$transaction.mockImplementation(
                 async (
                     cb: (tx: {
-                        product: { updateMany: jest.Mock };
+                        product: {
+                            updateMany: jest.Mock;
+                        };
                     }) => Promise<unknown>,
                 ) => {
                     const tx = {
@@ -205,6 +227,7 @@ describe('OrdersService', () => {
                                 .mockResolvedValue({ count: 0 }),
                         },
                     };
+
                     return cb(tx);
                 },
             );
@@ -245,6 +268,7 @@ describe('OrdersService', () => {
 
         it('should process payment and add job to queue', async () => {
             prisma.order.findUnique.mockResolvedValue(mockOrder);
+
             prisma.order.update.mockResolvedValue({
                 ...mockOrder,
                 status: OrderStatus.PROCESSING,
@@ -254,10 +278,11 @@ describe('OrdersService', () => {
 
             expect(prisma.order.update).toHaveBeenCalledTimes(2);
 
-            expect(mockOrdersQueue.add).toHaveBeenCalledWith(
+            expect(mockAdd).toHaveBeenCalledWith(
                 'process-order',
                 expect.anything(),
             );
+
             expect(result.success).toBe(true);
         });
     });
@@ -288,12 +313,18 @@ describe('OrdersService', () => {
             prisma.$transaction.mockImplementation(
                 async (
                     cb: (tx: {
-                        product: { update: jest.Mock };
-                        order: { update: jest.Mock };
+                        product: {
+                            update: jest.Mock;
+                        };
+                        order: {
+                            update: jest.Mock;
+                        };
                     }) => Promise<unknown>,
                 ) => {
                     const tx = {
-                        product: { update: jest.fn().mockResolvedValue({}) },
+                        product: {
+                            update: jest.fn().mockResolvedValue({}),
+                        },
                         order: {
                             update: jest.fn().mockResolvedValue({
                                 ...mockOrder,
@@ -301,6 +332,7 @@ describe('OrdersService', () => {
                             }),
                         },
                     };
+
                     return cb(tx);
                 },
             );
@@ -308,6 +340,7 @@ describe('OrdersService', () => {
             const result = await service.cancelOrder('user-1', 'order-1');
 
             expect(result.order.status).toBe(OrderStatus.CANCELLED);
+
             expect(result.refund).toBeNull();
         });
     });
@@ -350,7 +383,10 @@ describe('OrdersService', () => {
         it('should return paginated list of orders', async () => {
             prisma.$transaction.mockResolvedValue([[mockOrder], 1]);
 
-            const result = await service.findAll({ page: 1, limit: 10 });
+            const result = await service.findAll({
+                page: 1,
+                limit: 10,
+            });
 
             expect(result).toEqual({
                 items: [mockOrder],
@@ -369,7 +405,9 @@ describe('OrdersService', () => {
             prisma.order.findUnique.mockResolvedValue(mockOrder);
 
             await expect(
-                service.updateStatus('order-1', { status: OrderStatus.NEW }),
+                service.updateStatus('order-1', {
+                    status: OrderStatus.NEW,
+                }),
             ).rejects.toThrow(BadRequestException);
         });
 
@@ -378,7 +416,9 @@ describe('OrdersService', () => {
                 ...mockOrder,
                 status: OrderStatus.PROCESSING,
             };
+
             prisma.order.findUnique.mockResolvedValue(processingOrder);
+
             prisma.order.update.mockResolvedValue({
                 ...processingOrder,
                 status: OrderStatus.COMPLETED,
