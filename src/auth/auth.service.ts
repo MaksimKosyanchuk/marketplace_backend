@@ -46,7 +46,7 @@ export class AuthService {
             email: dto.email,
             passwordHash,
             nickName: dto.nickName,
-            role
+            role,
         });
 
         this.logger.log(`User registered ${user.id}`);

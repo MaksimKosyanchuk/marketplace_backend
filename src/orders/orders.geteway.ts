@@ -8,6 +8,12 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Injectable, Logger } from '@nestjs/common';
 
+interface JwtPayload {
+    sub?: string;
+    id?: string;
+    [key: string]: unknown;
+}
+
 @Injectable()
 @WebSocketGateway({
     cors: {
@@ -24,21 +30,27 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     async handleConnection(client: Socket) {
         try {
-            const token = client.handshake.auth?.token;
+            const token = client.handshake.auth?.token as string | undefined;
             if (!token) {
                 client.disconnect();
                 return;
             }
 
-            // Верифікація токена
-            const payload = await this.jwtService.verifyAsync(token);
-            const userId = payload.sub || payload.id;
+            const payload =
+                await this.jwtService.verifyAsync<JwtPayload>(token);
+            const userId = payload.sub ?? payload.id;
 
-            // Приєднуємо сокет до персональної кімнати користувача
+            if (!userId) {
+                client.disconnect();
+                return;
+            }
+
             await client.join(`user_${userId}`);
             this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
-        } catch (err) {
-            this.logger.error(`Socket connection error: ${err.message}`);
+        } catch (err: unknown) {
+            const errorMessage =
+                err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error(`Socket connection error: ${errorMessage}`);
             client.disconnect();
         }
     }
@@ -47,7 +59,6 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`Client disconnected: ${client.id}`);
     }
 
-    // Метод, який викликає воркер оплати або сервіс замовлень
     emitOrderStatusUpdate(userId: string, orderId: string, status: string) {
         this.server.to(`user_${userId}`).emit('order_status_updated', {
             orderId,

@@ -26,6 +26,12 @@ import {
 } from './dto/auth-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
+interface RequestWithCookies extends Request {
+    cookies?: {
+        refreshToken?: string;
+    };
+}
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -39,8 +45,14 @@ export class AuthController {
             'Пользователь успешно зарегистрирован. Возвращает accessToken и устанавливает refreshToken в HttpOnly cookie.',
         type: AuthTokenResponseDto,
     })
-    @ApiResponse({ status: 400, description: 'Невалидные данные (Ошибка валидации DTO)' })
-    @ApiResponse({ status: 409, description: 'Пользователь с таким email уже существует' })
+    @ApiResponse({
+        status: 400,
+        description: 'Невалидные данные (Ошибка валидации DTO)',
+    })
+    @ApiResponse({
+        status: 409,
+        description: 'Пользователь с таким email уже существует',
+    })
     async register(
         @Body() dto: RegisterDto,
         @Res({ passthrough: true }) res: Response,
@@ -81,7 +93,7 @@ export class AuthController {
         description: 'Refresh token отсутствует в cookie или недействителен',
     })
     async refresh(
-        @Req() req: Request,
+        @Req() req: RequestWithCookies,
         @Res({ passthrough: true }) res: Response,
     ) {
         const refreshToken = req.cookies?.refreshToken;
@@ -103,7 +115,7 @@ export class AuthController {
         description: 'Успешный выход, cookie очищена',
     })
     async logout(
-        @Req() req: Request,
+        @Req() req: RequestWithCookies,
         @Res({ passthrough: true }) res: Response,
     ) {
         const refreshToken = req.cookies?.refreshToken;

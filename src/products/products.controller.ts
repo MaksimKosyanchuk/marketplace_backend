@@ -41,7 +41,10 @@ export class ProductsController {
     constructor(private readonly productsService: ProductsService) {}
 
     @Get()
-    @ApiOperation({ summary: 'Получить список товаров (с фильтрацией, пагинацией и сортировкой)' })
+    @ApiOperation({
+        summary:
+            'Получить список товаров (с фильтрацией, пагинацией и сортировкой)',
+    })
     @ApiResponse({
         status: 200,
         description: 'Список товаров успешно получен',
@@ -77,9 +80,15 @@ export class ProductsController {
         description: 'Товар успешно создан',
         type: ProductResponseDto,
     })
-    @ApiResponse({ status: 400, description: 'Невалидные данные запроса или файла' })
+    @ApiResponse({
+        status: 400,
+        description: 'Невалидные данные запроса или файла',
+    })
     @ApiResponse({ status: 401, description: 'Неавторизован' })
-    @ApiResponse({ status: 403, description: 'Доступ запрещен (Требуется роль ADMIN)' })
+    @ApiResponse({
+        status: 403,
+        description: 'Доступ запрещен (Требуется роль ADMIN)',
+    })
     create(
         @Body() dto: CreateProductDto,
         @UploadedFile() file?: Express.Multer.File,
@@ -123,7 +132,9 @@ export class ProductsController {
     @Roles(Role.ADMIN)
     @Delete(':id')
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: 'Мягкое удаление товара / Архивирование (Только ADMIN)' })
+    @ApiOperation({
+        summary: 'Мягкое удаление товара / Архивирование (Только ADMIN)',
+    })
     @ApiParam({ name: 'id', description: 'ID товара', example: 'prod_999xyz' })
     @ApiResponse({
         status: 200,

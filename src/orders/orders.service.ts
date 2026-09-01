@@ -85,7 +85,7 @@ export class OrdersService {
         await this.logger.log(
             OrdersService.name,
             `Order created: ${order.id}`,
-            { userId, totalAmount: order.totalAmount }
+            { userId, totalAmount: order.totalAmount },
         );
 
         return order;
@@ -133,7 +133,7 @@ export class OrdersService {
         await this.logger.log(
             OrdersService.name,
             `Order payment processed and status changed to PROCESSING: ${order.id}`,
-            { transactionId: payment.transactionId }
+            { transactionId: payment.transactionId },
         );
 
         return {
@@ -143,14 +143,16 @@ export class OrdersService {
         };
     }
 
-    private mockChargePayment(amount: Prisma.Decimal): {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    private mockChargePayment(_amount: Prisma.Decimal): {
         success: boolean;
         transactionId: string;
     } {
         return { success: true, transactionId: `mock_${Date.now()}` };
     }
 
-    private mockRefundPayment(amount: Prisma.Decimal): {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    private mockRefundPayment(_amount: Prisma.Decimal): {
         success: boolean;
         refundId: string;
     } {
@@ -181,7 +183,7 @@ export class OrdersService {
         await this.logger.log(
             OrdersService.name,
             `Order cancelled by user: ${order.id}`,
-            { userId }
+            { userId },
         );
 
         return result;
@@ -353,7 +355,7 @@ export class OrdersService {
             const result = (await this.finalizeCancellation(order)).order;
             await this.logger.log(
                 OrdersService.name,
-                `Order status updated to CANCELLED: ${orderId}`
+                `Order status updated to CANCELLED: ${orderId}`,
             );
             return result;
         }
@@ -366,7 +368,7 @@ export class OrdersService {
 
         await this.logger.log(
             OrdersService.name,
-            `Order status updated to ${dto.status}: ${orderId}`
+            `Order status updated to ${dto.status}: ${orderId}`,
         );
 
         return updatedOrder;

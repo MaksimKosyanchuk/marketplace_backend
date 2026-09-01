@@ -49,7 +49,10 @@ export class CartController {
         description: 'Товар успешно добавлен в корзину',
         type: CartItemDto,
     })
-    @ApiResponse({ status: 400, description: 'Невалидный UUID или количество < 1' })
+    @ApiResponse({
+        status: 400,
+        description: 'Невалидный UUID или количество < 1',
+    })
     @ApiResponse({ status: 401, description: 'Неавторизован' })
     @ApiResponse({ status: 404, description: 'Товар с таким ID не найден' })
     addItem(

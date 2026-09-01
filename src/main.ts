@@ -54,6 +54,8 @@ async function bootstrap() {
 
     await app.listen(port);
     console.log(`🚀 Server started on port ${port}`);
-    console.log(`📚 Swagger docs available at http://localhost:${port}/api/docs`);
+    console.log(
+        `📚 Swagger docs available at http://localhost:${port}/api/docs`,
+    );
 }
 bootstrap();

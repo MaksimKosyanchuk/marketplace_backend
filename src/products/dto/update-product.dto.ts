@@ -9,7 +9,9 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
         nullable: true,
     })
     @IsOptional()
-    @ValidateIf((o) => o.imageUrl !== null && o.imageUrl !== '')
+    @ValidateIf(
+        (o: { imageUrl?: unknown }) => o.imageUrl !== null && o.imageUrl !== '',
+    )
     @IsUrl({}, { message: 'imageUrl must be a valid URL or null' })
     imageUrl?: string | null;
 }

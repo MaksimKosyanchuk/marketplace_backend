@@ -18,9 +18,15 @@ export class UserProfileResponseDto {
     @ApiProperty({ example: 'JohnDoe', description: 'Никнейм' })
     nickName: string;
 
-    @ApiProperty({ example: 'USER', description: 'Роль пользователя в системе' })
+    @ApiProperty({
+        example: 'USER',
+        description: 'Роль пользователя в системе',
+    })
     role: string;
 
-    @ApiProperty({ example: '2026-08-01T12:00:00.000Z', description: 'Дата создания' })
+    @ApiProperty({
+        example: '2026-08-01T12:00:00.000Z',
+        description: 'Дата создания',
+    })
     createdAt: Date;
 }

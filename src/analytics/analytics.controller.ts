@@ -33,8 +33,14 @@ export class AnalyticsController {
         description: 'Успешное получение данных дашборда',
         type: DashboardResponseDto,
     })
-    @ApiResponse({ status: 401, description: 'Неавторизован (отсутствует или невалиден JWT)' })
-    @ApiResponse({ status: 403, description: 'Доступ запрещен (требуется роль ADMIN)' })
+    @ApiResponse({
+        status: 401,
+        description: 'Неавторизован (отсутствует или невалиден JWT)',
+    })
+    @ApiResponse({
+        status: 403,
+        description: 'Доступ запрещен (требуется роль ADMIN)',
+    })
     async getDashboard(@Query() query: DateFilterDto) {
         return this.analyticsService.getDashboardData(query);
     }
@@ -42,12 +48,14 @@ export class AnalyticsController {
     @Get('export/csv')
     @ApiOperation({
         summary: 'Экспортировать отчет по заказам в CSV',
-        description: 'Скачивает CSV-файл со списком заказов за выбранный интервал дат.',
+        description:
+            'Скачивает CSV-файл со списком заказов за выбранный интервал дат.',
     })
     @ApiProduces('text/csv')
     @ApiResponse({
         status: 200,
-        description: 'CSV-файл успешно сгенерирован и отправлен в виде скачиваемого вложения.',
+        description:
+            'CSV-файл успешно сгенерирован и отправлен в виде скачиваемого вложения.',
         schema: {
             type: 'string',
             format: 'binary',

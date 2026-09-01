@@ -59,6 +59,7 @@ describe('AnalyticsService', () => {
                 salesTimeline: [],
             });
 
+            // eslint-disable-next-line @typescript-eslint/unbound-method
             expect(prismaService.order.aggregate).toHaveBeenCalledWith({
                 where: {
                     status: {
@@ -148,6 +149,7 @@ describe('AnalyticsService', () => {
                 },
             ]);
 
+            // eslint-disable-next-line @typescript-eslint/unbound-method
             expect(prismaService.order.aggregate).toHaveBeenCalledWith({
                 where: {
                     createdAt: {
@@ -194,7 +196,8 @@ describe('AnalyticsService', () => {
                 from: '2026-08-01',
             });
 
-            const expectedHeader = 'Order ID,Date,Customer,Status,Total Amount ($)\n';
+            const expectedHeader =
+                'Order ID,Date,Customer,Status,Total Amount ($)\n';
             expect(csvResult.startsWith(expectedHeader)).toBe(true);
 
             expect(csvResult).toContain('"order-123"');
@@ -205,6 +208,7 @@ describe('AnalyticsService', () => {
             expect(csvResult).toContain('"N/A"');
             expect(csvResult).toContain('"NEW",45.00');
 
+            // eslint-disable-next-line @typescript-eslint/unbound-method
             expect(prismaService.order.findMany).toHaveBeenCalledWith({
                 where: {
                     createdAt: {
@@ -223,7 +227,9 @@ describe('AnalyticsService', () => {
 
             const csvResult = await service.generateOrdersCsv({});
 
-            expect(csvResult).toBe('Order ID,Date,Customer,Status,Total Amount ($)\n');
+            expect(csvResult).toBe(
+                'Order ID,Date,Customer,Status,Total Amount ($)\n',
+            );
         });
     });
 });

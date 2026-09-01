@@ -10,7 +10,31 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductSort, QueryProductDto } from './dto/query-product.dto';
 import { Prisma } from '@prisma/client';
 import { deleteFile } from '../common/utils/file';
-import { LoggerService } from '../logger/logger.service';;
+import { LoggerService } from '../logger/logger.service';
+
+interface ProductWithCategory {
+    id: string;
+    name: string;
+    description: string;
+    price: number;
+    stock: number;
+    imageUrl: string | null;
+    isArchived: boolean;
+    categoryId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    category?: unknown;
+}
+
+interface PaginatedProductsResult {
+    items: ProductWithCategory[];
+    meta: {
+        total: number;
+        page: number;
+        limit: number;
+        pageCount: number;
+    };
+}
 
 @Injectable()
 export class ProductsService {
@@ -23,10 +47,12 @@ export class ProductsService {
         private logger: LoggerService,
     ) {}
 
-    async findAll(query: QueryProductDto) {
+    async findAll(query: QueryProductDto): Promise<PaginatedProductsResult> {
         const cacheKey = this.CACHE_PREFIX + JSON.stringify(query);
         const cached = await this.redis.get(cacheKey);
-        if (cached) return JSON.parse(cached);
+        if (cached) {
+            return JSON.parse(cached) as PaginatedProductsResult;
+        }
 
         const {
             search,
@@ -69,8 +95,8 @@ export class ProductsService {
             this.prisma.product.count({ where }),
         ]);
 
-        const result = {
-            items,
+        const result: PaginatedProductsResult = {
+            items: items as ProductWithCategory[],
             meta: { total, page, limit, pageCount: Math.ceil(total / limit) },
         };
 
@@ -78,7 +104,7 @@ export class ProductsService {
         return result;
     }
 
-    async findOne(id: string) {
+    async findOne(id: string): Promise<ProductWithCategory> {
         const product = await this.prisma.product.findUnique({
             where: { id },
             include: { category: true },
@@ -88,14 +114,16 @@ export class ProductsService {
             throw new NotFoundException('Product not found');
         }
 
-        return product;
+        return product as ProductWithCategory;
     }
 
     async create(dto: CreateProductDto, uploadedFilePath?: string) {
         try {
             await this.ensureCategoryExists(dto.categoryId);
 
-            const { image, ...productData } = dto;
+            const productData = { ...dto };
+            delete (productData as Record<string, unknown>).image;
+
             const imageUrl = uploadedFilePath ?? dto.imageUrl ?? null;
 
             const product = await this.prisma.product.create({
@@ -111,7 +139,7 @@ export class ProductsService {
             await this.logger.log(
                 ProductsService.name,
                 `Product created: ${product.id}`,
-                { productName: product.name }
+                { productName: product.name },
             );
             return product;
         } catch (error) {
@@ -129,7 +157,8 @@ export class ProductsService {
             await this.ensureCategoryExists(dto.categoryId);
         }
 
-        const { image, ...productData } = dto;
+        const productData = { ...dto };
+        delete (productData as Record<string, unknown>).image;
 
         let newImageUrl = existingProduct.imageUrl;
         let isImageChanged = false;
@@ -138,7 +167,7 @@ export class ProductsService {
             newImageUrl = uploadedFilePath;
             isImageChanged = true;
         } else if (dto.imageUrl !== undefined) {
-            newImageUrl = dto.imageUrl;
+            newImageUrl = dto.imageUrl ?? null;
             isImageChanged = dto.imageUrl !== existingProduct.imageUrl;
         }
 
@@ -163,7 +192,7 @@ export class ProductsService {
             await this.logger.log(
                 ProductsService.name,
                 `Product updated: ${updatedProduct.id}`,
-                { productName: updatedProduct.name }
+                { productName: updatedProduct.name },
             );
             return updatedProduct;
         } catch (error) {
@@ -191,10 +220,7 @@ export class ProductsService {
         await this.redis.delByPattern(`products:list:*`);
         await this.redis.delByPattern(`cart:*`);
 
-        await this.logger.log(
-            ProductsService.name,
-            `Product archived: ${id}`
-        );
+        await this.logger.log(ProductsService.name, `Product archived: ${id}`);
 
         return { success: true };
     }

@@ -15,7 +15,10 @@ export class TopProductDto {
     @ApiProperty({ example: 'prod_123', description: 'ID товара' })
     productId: string;
 
-    @ApiProperty({ example: 'Кроссовки Nike Air', description: 'Название товара' })
+    @ApiProperty({
+        example: 'Кроссовки Nike Air',
+        description: 'Название товара',
+    })
     productName: string;
 
     @ApiProperty({ example: 15, description: 'Продано штук' })

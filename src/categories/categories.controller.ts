@@ -69,8 +69,14 @@ export class CategoriesController {
     })
     @ApiResponse({ status: 400, description: 'Невалидные данные' })
     @ApiResponse({ status: 401, description: 'Неавторизован' })
-    @ApiResponse({ status: 403, description: 'Доступ запрещен (Требуется роль ADMIN)' })
-    @ApiResponse({ status: 409, description: 'Категория с таким именем уже существует' })
+    @ApiResponse({
+        status: 403,
+        description: 'Доступ запрещен (Требуется роль ADMIN)',
+    })
+    @ApiResponse({
+        status: 409,
+        description: 'Категория с таким именем уже существует',
+    })
     create(@Body() dto: CreateCategoryDto) {
         return this.categoriesService.create(dto);
     }

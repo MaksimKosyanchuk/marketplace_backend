@@ -8,7 +8,10 @@ export class OrderItemResponseDto {
     @ApiProperty({ example: 'prod_456def', description: 'ID товара' })
     productId: string;
 
-    @ApiProperty({ example: 'Беспроводная мышь', description: 'Название товара на момент заказа' })
+    @ApiProperty({
+        example: 'Беспроводная мышь',
+        description: 'Название товара на момент заказа',
+    })
     productName: string;
 
     @ApiProperty({ example: 49.99, description: 'Цена за единицу товара' })
@@ -25,19 +28,32 @@ export class OrderResponseDto {
     @ApiProperty({ example: 'user_123abc', description: 'ID покупателя' })
     userId: string;
 
-    @ApiProperty({ enum: OrderStatus, example: OrderStatus.NEW, description: 'Текущий статус заказа' })
+    @ApiProperty({
+        enum: OrderStatus,
+        example: OrderStatus.NEW,
+        description: 'Текущий статус заказа',
+    })
     status: OrderStatus;
 
     @ApiProperty({ example: 99.98, description: 'Общая сумма заказа' })
     totalAmount: number;
 
-    @ApiProperty({ type: [OrderItemResponseDto], description: 'Содержимое заказа' })
+    @ApiProperty({
+        type: [OrderItemResponseDto],
+        description: 'Содержимое заказа',
+    })
     items: OrderItemResponseDto[];
 
-    @ApiProperty({ example: '2026-08-01T12:00:00.000Z', description: 'Дата создания' })
+    @ApiProperty({
+        example: '2026-08-01T12:00:00.000Z',
+        description: 'Дата создания',
+    })
     createdAt: Date;
 
-    @ApiProperty({ example: '2026-08-01T12:00:00.000Z', description: 'Дата обновления' })
+    @ApiProperty({
+        example: '2026-08-01T12:00:00.000Z',
+        description: 'Дата обновления',
+    })
     updatedAt: Date;
 }
 

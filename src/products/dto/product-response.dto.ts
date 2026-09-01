@@ -15,7 +15,10 @@ export class ProductResponseDto {
     @ApiProperty({ example: 'Беспроводные наушники Sony WH-1000XM5' })
     name: string;
 
-    @ApiProperty({ example: 'Флагманские наушники с отличным шумоподавлением.', nullable: true })
+    @ApiProperty({
+        example: 'Флагманские наушники с отличным шумоподавлением.',
+        nullable: true,
+    })
     description?: string;
 
     @ApiProperty({ example: 399.99 })
@@ -33,7 +36,10 @@ export class ProductResponseDto {
     @ApiProperty({ type: ProductCategoryResponseDto, nullable: true })
     category?: ProductCategoryResponseDto;
 
-    @ApiProperty({ example: false, description: 'Флаг мягкого удаления (в архиве)' })
+    @ApiProperty({
+        example: false,
+        description: 'Флаг мягкого удаления (в архиве)',
+    })
     isArchived: boolean;
 
     @ApiProperty({ example: '2026-08-01T12:00:00.000Z' })
@@ -47,7 +53,10 @@ export class PaginatedProductsResponseDto {
     @ApiProperty({ type: [ProductResponseDto] })
     data: ProductResponseDto[];
 
-    @ApiProperty({ example: 150, description: 'Общее количество найденных товаров' })
+    @ApiProperty({
+        example: 150,
+        description: 'Общее количество найденных товаров',
+    })
     total: number;
 
     @ApiProperty({ example: 1, description: 'Текущая страница' })

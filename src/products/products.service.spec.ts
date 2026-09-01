@@ -13,8 +13,27 @@ jest.mock('../common/utils/file', () => ({
 
 describe('ProductsService', () => {
     let service: ProductsService;
-    let prisma: jest.Mocked<PrismaService>;
-    let redis: jest.Mocked<RedisService>;
+    let prisma: {
+        product: {
+            findMany: jest.Mock;
+            findUnique: jest.Mock;
+            create: jest.Mock;
+            update: jest.Mock;
+            count: jest.Mock;
+        };
+        category: {
+            findUnique: jest.Mock;
+        };
+        cartItem: {
+            deleteMany: jest.Mock;
+        };
+        $transaction: jest.Mock;
+    };
+    let redis: {
+        get: jest.Mock;
+        set: jest.Mock;
+        delByPattern: jest.Mock;
+    };
 
     const mockCategory = {
         id: 'cat-1',
@@ -114,10 +133,10 @@ describe('ProductsService', () => {
                 ],
                 meta: { total: 1, page: 1, limit: 10, pageCount: 1 },
             };
-            
+
             redis.get.mockResolvedValue(JSON.stringify(cachedResult));
 
-            const result = await service.findAll(query as any);
+            const result = await service.findAll(query);
 
             expect(redis.get).toHaveBeenCalledWith(
                 `products:list:${JSON.stringify(query)}`,
@@ -128,9 +147,9 @@ describe('ProductsService', () => {
 
         it('should fetch from database and set cache if Redis cache misses', async () => {
             redis.get.mockResolvedValue(null);
-            prisma.$transaction.mockResolvedValue([[mockProduct], 1] as any);
+            prisma.$transaction.mockResolvedValue([[mockProduct], 1]);
 
-            const result = await service.findAll(query as any);
+            const result = await service.findAll(query);
 
             expect(prisma.$transaction).toHaveBeenCalled();
             expect(redis.set).toHaveBeenCalledWith(
@@ -147,7 +166,7 @@ describe('ProductsService', () => {
 
     describe('findOne', () => {
         it('should return a product by id', async () => {
-            prisma.product.findUnique.mockResolvedValue(mockProduct as any);
+            prisma.product.findUnique.mockResolvedValue(mockProduct);
 
             const result = await service.findOne('prod-1');
 
@@ -177,10 +196,10 @@ describe('ProductsService', () => {
         };
 
         it('should create product successfully and invalidate cache', async () => {
-            prisma.category.findUnique.mockResolvedValue(mockCategory as any);
-            prisma.product.create.mockResolvedValue(mockProduct as any);
+            prisma.category.findUnique.mockResolvedValue(mockCategory);
+            prisma.product.create.mockResolvedValue(mockProduct);
 
-            const result = await service.create(dto as any, '/uploads/phone.jpg');
+            const result = await service.create(dto, '/uploads/phone.jpg');
 
             expect(prisma.category.findUnique).toHaveBeenCalledWith({
                 where: { id: 'cat-1' },
@@ -203,10 +222,12 @@ describe('ProductsService', () => {
             prisma.category.findUnique.mockResolvedValue(null);
 
             await expect(
-                service.create(dto as any, '/uploads/temp.jpg'),
+                service.create(dto, '/uploads/temp.jpg'),
             ).rejects.toThrow(BadRequestException);
 
-            expect(fileUtils.deleteFile).toHaveBeenCalledWith('/uploads/temp.jpg');
+            expect(fileUtils.deleteFile).toHaveBeenCalledWith(
+                '/uploads/temp.jpg',
+            );
             expect(prisma.product.create).not.toHaveBeenCalled();
         });
     });
@@ -218,41 +239,43 @@ describe('ProductsService', () => {
         };
 
         it('should update product, delete old image, and invalidate cache', async () => {
-            prisma.product.findUnique.mockResolvedValue(mockProduct as any);
+            prisma.product.findUnique.mockResolvedValue(mockProduct);
             prisma.product.update.mockResolvedValue({
                 ...mockProduct,
                 ...dto,
-            } as any);
+            });
 
-            const result = await service.update('prod-1', dto as any);
+            const result = await service.update('prod-1', dto);
 
             expect(prisma.product.update).toHaveBeenCalled();
-            expect(fileUtils.deleteFile).toHaveBeenCalledWith('/uploads/phone.jpg');
+            expect(fileUtils.deleteFile).toHaveBeenCalledWith(
+                '/uploads/phone.jpg',
+            );
             expect(redis.delByPattern).toHaveBeenCalledWith('products:list:*');
             expect(result.name).toBe('Updated Smartphone');
         });
 
         it('should delete newly uploaded file if update fails', async () => {
-            prisma.product.findUnique.mockResolvedValue(mockProduct as any);
-            
-            // Используем mockImplementationOnce с отклонением по требованию,
-            // чтобы промис не висел незахваченным во время await findOne()
+            prisma.product.findUnique.mockResolvedValue(mockProduct);
+
             prisma.product.update.mockImplementationOnce(() =>
                 Promise.reject(new Error('DB Error')),
             );
 
             await expect(
-                service.update('prod-1', dto as any, '/uploads/temp.jpg'),
+                service.update('prod-1', dto, '/uploads/temp.jpg'),
             ).rejects.toThrow('DB Error');
 
-            expect(fileUtils.deleteFile).toHaveBeenCalledWith('/uploads/temp.jpg');
+            expect(fileUtils.deleteFile).toHaveBeenCalledWith(
+                '/uploads/temp.jpg',
+            );
         });
     });
 
     describe('remove', () => {
         it('should archive product, delete cart items, and invalidate caches', async () => {
-            prisma.product.findUnique.mockResolvedValue(mockProduct as any);
-            prisma.$transaction.mockResolvedValue([{}, {}] as any);
+            prisma.product.findUnique.mockResolvedValue(mockProduct);
+            prisma.$transaction.mockResolvedValue([{}, {}]);
 
             const result = await service.remove('prod-1');
 
@@ -268,8 +291,8 @@ describe('ProductsService', () => {
             prisma.product.findUnique.mockResolvedValue({
                 ...mockProduct,
                 isArchived: true,
-            } as any);
-            prisma.product.update.mockResolvedValue(mockProduct as any);
+            });
+            prisma.product.update.mockResolvedValue(mockProduct);
 
             const result = await service.restore('prod-1');
 

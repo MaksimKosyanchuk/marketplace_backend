@@ -4,12 +4,34 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+interface AuthResponseDto {
+    accessToken?: string;
+    token?: string;
+    user?: {
+        id: string;
+    };
+    id?: string;
+}
+
+interface CartItemResponseDto {
+    productId: string;
+    quantity: number;
+}
+
+interface CartResponseDto {
+    items?: CartItemResponseDto[];
+}
+
+interface OrderResponseDto {
+    id: string;
+    items?: unknown[];
+}
+
 describe('Order Creation Flow (e2e)', () => {
     let app: INestApplication;
     let prisma: PrismaService;
 
     let userToken: string;
-    let testUserId: string;
     let testCategoryId: string;
     let testProductId: string;
 
@@ -22,7 +44,9 @@ describe('Order Creation Flow (e2e)', () => {
         }).compile();
 
         app = moduleFixture.createNestApplication();
-        app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+        app.useGlobalPipes(
+            new ValidationPipe({ whitelist: true, transform: true }),
+        );
         await app.init();
 
         prisma = app.get<PrismaService>(PrismaService);
@@ -34,7 +58,7 @@ describe('Order Creation Flow (e2e)', () => {
         await prisma.category.deleteMany();
         await prisma.user.deleteMany();
 
-        const authRes = await request(app.getHttpServer())
+        const authRes = await request(app.getHttpServer() as object)
             .post('/auth/register')
             .send({
                 email: 'customer@example.com',
@@ -43,8 +67,8 @@ describe('Order Creation Flow (e2e)', () => {
             })
             .expect(201);
 
-        userToken = authRes.body.accessToken || authRes.body.token;
-        testUserId = authRes.body.user?.id || authRes.body.id;
+        const body = authRes.body as AuthResponseDto;
+        userToken = (body.accessToken || body.token) as string;
 
         const category = await prisma.category.create({
             data: { name: 'E2E Category' },
@@ -74,7 +98,7 @@ describe('Order Creation Flow (e2e)', () => {
     });
 
     it('Критичний флоу: додавання в кошик -> оформлення замовлення -> списування stock', async () => {
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as object)
             .post('/cart/items')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
@@ -83,16 +107,19 @@ describe('Order Creation Flow (e2e)', () => {
             })
             .expect(201);
 
-        const cartRes = await request(app.getHttpServer())
+        const cartRes = await request(app.getHttpServer() as object)
             .get('/cart')
             .set('Authorization', `Bearer ${userToken}`)
             .expect(200);
 
-        expect(cartRes.body.items).toHaveLength(1);
-        expect(cartRes.body.items[0].productId).toBe(testProductId);
-        expect(cartRes.body.items[0].quantity).toBe(BUY_QUANTITY);
+        const cartBody = cartRes.body as CartResponseDto;
+        const items = cartBody.items ?? [];
 
-        const orderRes = await request(app.getHttpServer())
+        expect(items).toHaveLength(1);
+        expect(items[0].productId).toBe(testProductId);
+        expect(items[0].quantity).toBe(BUY_QUANTITY);
+
+        const orderRes = await request(app.getHttpServer() as object)
             .post('/orders/checkout')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
@@ -100,16 +127,18 @@ describe('Order Creation Flow (e2e)', () => {
             })
             .expect(201);
 
-        expect(orderRes.body.id).toBeDefined();
-        expect(orderRes.body.items).toHaveLength(1);
+        const orderBody = orderRes.body as OrderResponseDto;
+        expect(orderBody.id).toBeDefined();
+        expect(orderBody.items).toHaveLength(1);
 
-        const cartAfterOrder = await request(app.getHttpServer())
+        const cartAfterOrder = await request(app.getHttpServer() as object)
             .get('/cart')
             .set('Authorization', `Bearer ${userToken}`)
             .expect(200);
 
-        expect(cartAfterOrder.body.items || []).toHaveLength(0);
-        
+        const cartAfterBody = cartAfterOrder.body as CartResponseDto;
+        expect(cartAfterBody.items || []).toHaveLength(0);
+
         const updatedProduct = await prisma.product.findUnique({
             where: { id: testProductId },
         });

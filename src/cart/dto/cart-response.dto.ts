@@ -15,32 +15,50 @@ export class CartItemProductDto {
 }
 
 export class CartItemDto {
-    @ApiProperty({ example: 'b5f928c1-1234-5678-9abc-def123456789', description: 'ID позиции в корзине' })
+    @ApiProperty({
+        example: 'b5f928c1-1234-5678-9abc-def123456789',
+        description: 'ID позиции в корзине',
+    })
     id: string;
 
     @ApiProperty({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' })
     productId: string;
 
-    @ApiProperty({ type: CartItemProductDto, description: 'Краткие данные товара' })
+    @ApiProperty({
+        type: CartItemProductDto,
+        description: 'Краткие данные товара',
+    })
     product: CartItemProductDto;
 
     @ApiProperty({ example: 2, description: 'Количество' })
     quantity: number;
 
-    @ApiProperty({ example: 299.98, description: 'Итоговая стоимость позиций (price * quantity)' })
+    @ApiProperty({
+        example: 299.98,
+        description: 'Итоговая стоимость позиций (price * quantity)',
+    })
     totalPrice: number;
 }
 
 export class CartResponseDto {
-    @ApiProperty({ example: 'c8d7e6f5-4321-8765-4321-fedcba987654', description: 'ID корзины' })
+    @ApiProperty({
+        example: 'c8d7e6f5-4321-8765-4321-fedcba987654',
+        description: 'ID корзины',
+    })
     id: string;
 
-    @ApiProperty({ type: [CartItemDto], description: 'Список элементов корзины' })
+    @ApiProperty({
+        type: [CartItemDto],
+        description: 'Список элементов корзины',
+    })
     items: CartItemDto[];
 
     @ApiProperty({ example: 299.98, description: 'Общая сумма всей корзины' })
     totalAmount: number;
 
-    @ApiProperty({ example: 2, description: 'Общее количество товаров в корзине' })
+    @ApiProperty({
+        example: 2,
+        description: 'Общее количество товаров в корзине',
+    })
     totalItems: number;
 }
