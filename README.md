@@ -1,31 +1,32 @@
 # Mini Marketplace API
 
-Backend частина застосунку електронної комерції (маркетплейс) з адмін-панеллю, підтримкою черг, кешуванням та транзакційним списанням складу.
+Backend частина Mini Marketplace — e-commerce застосунку з каталогом товарів, кошиком, замовленнями та адміністративною панеллю.
 
-Застосунок реалізований на **NestJS + TypeScript**, використовує **PostgreSQL** як основну базу даних, **Prisma ORM** для роботи з нею, **Redis + BullMQ** для асинхронної обробки замовлень та **Socket.IO** для real-time оновлень.
+Застосунок реалізований на **NestJS + TypeScript**, використовує **PostgreSQL + Prisma** для роботи з даними, **Redis + BullMQ** для кешування та асинхронної обробки замовлень і **Socket.IO** для real-time оновлень.
 
 ---
 
-## Стек
+# Tech Stack
 
 * NestJS
 * TypeScript
 * PostgreSQL
 * Prisma ORM
-* Redis & BullMQ
+* Redis
+* BullMQ
 * Socket.IO
-* JWT (Access + Refresh)
+* JWT (Access + Refresh Tokens)
 * bcrypt
-* class-validator & class-transformer
+* class-validator / class-transformer
 * @nestjs/throttler
 * Helmet
 * Jest
-* Docker & Docker Compose
+* Docker / Docker Compose
 * GitHub Actions
 
 ---
 
-# Архітектура
+# Architecture
 
 Застосунок побудований за модульною клієнт-серверною архітектурою:
 
@@ -34,166 +35,245 @@ React Frontend
       │
       │ REST API / WebSocket
       ▼
-NestJS Backend ──(BullMQ)──► Redis (Async Queue)
+NestJS Backend
       │
-      │ Prisma ORM (Transactions)
+      ├── BullMQ → Redis
+      │
       ▼
-PostgreSQL
+   Prisma ORM
+      │
+      ▼
+ PostgreSQL
 ```
 
-Backend відповідає за:
+Основні модулі backend:
 
-* аутентифікацію та рольову модель (RBAC: `CUSTOMER`, `ADMIN`);
-* управління каталогом товарів (CRUD, пагінація, фільтрація, повнотекстовий пошук);
+* Authentication & Users
+* Products
+* Categories
+* Cart
+* Orders
+* Analytics
+* Queue
+* WebSocket Gateway
+
+---
+
+# Authentication & RBAC
+
+Реалізована JWT-аутентифікація з двома типами токенів:
+
+* Access Token — передається через `Authorization: Bearer <token>`
+* Refresh Token — зберігається в `HTTP-only` cookie та підтримує rotation
+
+Доступ до функціоналу розділений за ролями:
+
+### CUSTOMER
+
+* перегляд каталогу;
+* робота з кошиком;
+* створення замовлень;
+* перегляд власної історії замовлень.
+
+### ADMIN
+
+* управління товарами;
 * управління категоріями;
-* керування кошиком користувача;
-* транзакційне оформлення замовлень із захистом від race conditions;
-* асинхронну обробку замовлень через черги (BullMQ);
-* симуляцію платежів;
-* real-time оновлення статусів замовлень через Socket.IO;
-* аналітику продажу та експорт звітів у CSV.
+* перегляд усіх замовлень;
+* зміна статусів;
+* аналітика;
+* експорт звітів.
+
+Для захисту authentication endpoints від brute-force атак використовується `@nestjs/throttler`.
 
 ---
 
-# База даних та транзакції
+# Products & Categories
 
-Для зберігання даних використовується **PostgreSQL**.
+Реалізовано:
 
-## Ключові особливості реалізації
+* CRUD товарів;
+* пагінацію;
+* пошук;
+* фільтрацію;
+* сортування;
+* категоризацію;
+* керування stock;
+* CRUD категорій;
+* Redis caching для каталогу.
 
-### 1. Атомарність списання складу
-
-Оформлення замовлення відбувається всередині єдиної транзакції бази даних через `prisma.$transaction`.
-
-Перед списанням залишків перевіряється актуальна кількість товару на складі.
-
-Це забезпечує коректне списання товарів навіть при одночасному оформленні декількох замовлень та захищає систему від race conditions і продажу товару понад наявний залишок.
-
-### 2. Індексація
-
-Для оптимізації пошуку та фільтрації за каталогом додано індекси на поля:
-
-* `name`
-* `categoryId`
-* `price`
-* `createdAt`
+Кеш каталогу автоматично інвалідується після адміністративних змін товарів.
 
 ---
 
-# Аутентифікація та RBAC
+# Cart & Orders
 
-Для захисту роутів використовується двохрівнева система токенів.
+Авторизований користувач може:
 
-### Access Token
-
-**JWT Access Token** передається в заголовку:
-
-```http
-Authorization: Bearer <token>
-```
-
-### Refresh Token
-
-**JWT Refresh Token** зберігається в безпечному `HTTP-only` cookie з підтримкою ротації.
-
----
-
-## Ролі
-
-### `CUSTOMER`
-
-Покупець має можливість:
-
-* переглядати каталог;
-* переглядати товари;
-* керувати власним кошиком;
-* створювати замовлення;
-* переглядати власні замовлення.
-
-### `ADMIN`
-
-Адміністратор має можливість:
-
-* створювати товари;
-* редагувати товари;
+* додавати товари до кошика;
+* змінювати кількість;
 * видаляти товари;
-* створювати та редагувати категорії;
-* переглядати всі замовлення;
-* змінювати статуси замовлень;
-* переглядати аналітику продажів;
-* експортувати звіти.
+* оформлювати замовлення;
+* переглядати історію замовлень.
 
-Для захисту від brute-force атак на authentication endpoints використовується `@nestjs/throttler`.
+Під час checkout:
 
----
-
-# Кешування та черги
-
-Для роботи з Redis використовується **Redis + BullMQ**.
-
-## Кешування каталогу
-
-Запити на отримання публічного списку товарів кешуються в Redis.
-
-Кеш автоматично інвалідується при адміністративних змінах каталогу:
-
-* створення товару;
-* оновлення товару;
-* видалення товару.
-
-Це дозволяє зменшити кількість запитів до PostgreSQL при частому перегляді каталогу.
+1. перевіряється кошик;
+2. перевіряється актуальний stock;
+3. створюється замовлення та `order items`;
+4. stock атомарно списується;
+5. після успішної транзакції створюється BullMQ job.
 
 ---
 
-## Асинхронна обробка замовлень
+# Transactions & Race Conditions
 
-Після того як замовлення успішно створено та склад списано, задача передається в чергу **BullMQ** для фонової обробки.
+Ключова частина системи — захист stock від конкурентних запитів.
 
-Черга відповідає за асинхронні операції, зокрема:
+Операції створення замовлення та списання товарів виконуються всередині транзакції Prisma.
 
-* генерацію нотифікацій;
-* подальшу обробку замовлення;
-* переведення статусу з `NEW` у `PROCESSING`.
+Це дозволяє коректно обробляти ситуації, коли декілька користувачів одночасно намагаються придбати останні одиниці товару.
 
-Таким чином, довгі або другорядні операції не блокують основний HTTP-запит користувача.
+Система не дозволяє створити замовлення, якщо актуального stock недостатньо.
 
 ---
 
-# Real-time оновлення
+# Edge Cases
 
-Для real-time комунікації використовується **Socket.IO Gateway**.
+Backend містить обробку основних edge cases та некоректних сценаріїв:
 
-Клієнти можуть підключитися до WebSocket та отримувати миттєві оновлення про зміну статусів замовлення без необхідності перезавантажувати сторінку.
+* товар не існує;
+* категорія не існує;
+* товар закінчився на складі;
+* недостатня кількість товару;
+* порожній кошик;
+* неіснуюче замовлення;
+* спроба отримати чуже замовлення;
+* спроба змінити чуже замовлення;
+* доступ до admin endpoints без необхідної ролі;
+* повторні або некоректні операції з кошиком;
+* невалідні DTO та параметри запитів;
+* некоректні значення кількості або ціни;
+* помилки authentication / authorization;
+* конфлікти при одночасному оформленні замовлень.
 
-Життєвий цикл замовлення:
+Помилки централізовано обробляються та повертаються клієнту у відповідному HTTP-форматі.
+
+---
+
+# Redis & BullMQ
+
+Redis використовується для:
+
+* кешування каталогу;
+* роботи BullMQ.
+
+Після успішного створення замовлення воно передається в BullMQ для асинхронної обробки.
+
+Queue використовується для операцій, які не повинні блокувати основний HTTP request, зокрема подальшої обробки замовлення та генерації нотифікацій.
+
+---
+
+# Real-time Updates
+
+Для real-time оновлень використовується Socket.IO.
+
+Клієнти отримують зміни статусу замовлення без необхідності перезавантажувати сторінку.
+
+Основний lifecycle:
 
 ```text
 NEW
- │
- ▼
+ ↓
 PROCESSING
- │
- ▼
+ ↓
 SHIPPED
- │
- ▼
+ ↓
 COMPLETED
 ```
 
-У випадку скасування:
+Також замовлення може перейти в `CANCELLED`.
 
-```text
-NEW / PROCESSING
-        │
-        ▼
-    CANCELLED
+---
+
+# Analytics
+
+Для адміністратора реалізована базова аналітика:
+
+* загальна виручка;
+* кількість замовлень;
+* кількість проданих товарів;
+* популярні товари;
+* статистика за вибраний період.
+
+Також реалізовано експорт звітів у CSV.
+
+---
+
+# Database
+
+Основна база даних — PostgreSQL.
+
+Для роботи з БД використовується Prisma ORM.
+
+Додані індекси для основних полів пошуку та фільтрації:
+
+* `name`;
+* `categoryId`;
+* `price`;
+* `createdAt`.
+
+Міграції управляються через Prisma Migrate.
+
+Корисні команди:
+
+```bash
+npx prisma migrate dev
+npx prisma generate
+npx prisma studio
 ```
+
+---
+
+# Logging
+
+У backend реалізовано логування ключових подій та операцій системи.
+
+Логуються, зокрема:
+
+* authentication events;
+* створення замовлень;
+* зміна статусів;
+* операції з товарами;
+* помилки та exceptions;
+* критичні помилки бізнес-логіки.
+
+Це спрощує debugging та моніторинг роботи застосунку.
+
+---
+
+# Security
+
+Реалізовані основні механізми захисту:
+
+* JWT authentication;
+* Access + Refresh Tokens;
+* HTTP-only cookies;
+* Refresh Token Rotation;
+* bcrypt password hashing;
+* RBAC;
+* DTO validation;
+* `class-validator`;
+* rate limiting;
+* Helmet;
+* перевірка authorization на захищених endpoints;
+* централізована обробка помилок.
 
 ---
 
 # Environment Variables
 
-Для запуску створіть `.env` на основі `.env.example`:
+Створіть `.env` на основі `.env.example`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/marketplace?schema=public"
@@ -208,314 +288,100 @@ PORT=3001
 
 ---
 
-# Запуск через Docker
+# Docker
 
-Усі необхідні сервіси:
+Backend, PostgreSQL та Redis запускаються через Docker Compose.
 
-* NestJS Backend
-* PostgreSQL
-* Redis
-
-можна запустити через Docker Compose.
-
-У директорії `backend` виконайте:
+У директорії `backend`:
 
 ```bash
 docker compose up --build
 ```
 
-Після запуску будуть доступні:
+Після запуску:
 
 ```text
-Backend API:  http://localhost:3001
-PostgreSQL:   localhost:5432
-Redis:        localhost:6379
+Backend API: http://localhost:3001
+Swagger:     http://localhost:3001/api
+PostgreSQL:  localhost:5432
+Redis:       localhost:6379
 ```
 
-Міграції Prisma застосовуються автоматично під час запуску контейнера.
-
----
-
-## Зупинка Docker
+Зупинка:
 
 ```bash
 docker compose down
 ```
 
-Для повного очищення даних разом із Docker volumes:
+Повне очищення разом із database volume:
 
 ```bash
 docker compose down -v
 ```
 
-> ⚠️ Команда `docker compose down -v` видаляє volume PostgreSQL, а разом із ним і дані бази.
-
 ---
 
-# Локальний запуск без Docker
+# Local Development
 
-Для локального запуску необхідно встановити:
-
-* Node.js
-* PostgreSQL
-* Redis
-
-### 1. Встановлення залежностей
+Для запуску без Docker необхідні Node.js, PostgreSQL та Redis.
 
 ```bash
 npm install
-```
 
-### 2. Створення `.env`
-
-```bash
 cp .env.example .env
-```
 
-Після цього налаштуйте необхідні environment variables.
-
-### 3. Застосування Prisma migrations
-
-```bash
 npx prisma migrate dev
-```
 
-### 4. Запуск у development mode
-
-```bash
 npm run start:dev
 ```
 
 ---
 
-# Prisma
+# API Documentation
 
-Для роботи з базою даних використовується **Prisma ORM**.
+Для документації API використовується Swagger.
 
-Основна Prisma schema знаходиться за адресою:
-
-```text
-prisma/schema.prisma
-```
-
-Для створення нової migration:
-
-```bash
-npx prisma migrate dev --name migration_name
-```
-
-Для генерації Prisma Client:
-
-```bash
-npx prisma generate
-```
-
-Для відкриття Prisma Studio:
-
-```bash
-npx prisma studio
-```
-
----
-
-# Документація API
-
-Для API використовується **Swagger**.
-
-Після запуску backend документація доступна за адресою:
+Після запуску backend:
 
 ```text
 http://localhost:3001/api
 ```
 
-Swagger дозволяє:
-
-* переглядати всі API endpoints;
-* переглядати DTO;
-* переглядати параметри запитів;
-* тестувати API безпосередньо з браузера.
+Swagger дозволяє переглядати та тестувати API endpoints, DTO та параметри запитів.
 
 ---
 
-# API Features
+# Testing
 
-## Authentication
+Реалізовані unit та E2E тести.
 
-Backend підтримує:
-
-* реєстрацію;
-* авторизацію;
-* JWT Access Tokens;
-* JWT Refresh Tokens;
-* refresh token rotation;
-* logout;
-* захищені endpoints;
-* RBAC;
-* throttling authentication endpoints.
-
----
-
-## Products
-
-Підтримується:
-
-* створення товарів;
-* редагування товарів;
-* видалення товарів;
-* перегляд товару;
-* отримання списку товарів;
-* пагінація;
-* фільтрація;
-* сортування;
-* пошук;
-* категоризація;
-* кешування каталогу.
-
-Публічний каталог доступний без авторизації.
-
-Адміністративні операції доступні тільки користувачам з роллю `ADMIN`.
-
----
-
-## Categories
-
-Адміністратор може:
-
-* створювати категорії;
-* редагувати категорії;
-* видаляти категорії;
-* переглядати категорії.
-
-Категорії використовуються для організації каталогу товарів та фільтрації.
-
----
-
-## Cart
-
-Авторизований користувач може:
-
-* додавати товари до кошика;
-* змінювати кількість товару;
-* видаляти товари;
-* переглядати поточний кошик.
-
-Для роботи з кошиком користувач повинен бути авторизований.
-
----
-
-## Orders
-
-Під час оформлення замовлення:
-
-1. Перевіряється кошик користувача.
-2. Перевіряється актуальний stock товарів.
-3. Створюється замовлення.
-4. Створюються order items.
-5. Зі складу списується необхідна кількість товарів.
-6. Всі операції виконуються в рамках транзакції.
-7. Після успішної транзакції створюється BullMQ job.
-8. Замовлення переходить до подальшої асинхронної обробки.
-9. Клієнт отримує real-time оновлення через Socket.IO.
-
----
-
-# Захист від Race Conditions
-
-Критична частина системи — оформлення замовлення та списання товарів зі складу.
-
-Приклад проблеми:
-
-```text
-Stock = 1
-
-User A → купує товар
-User B → купує товар одночасно
-```
-
-Без правильної транзакційної логіки обидва запити можуть побачити:
-
-```text
-stock = 1
-```
-
-і обидва успішно створити замовлення.
-
-У результаті система продасть:
-
-```text
-2 товари
-```
-
-при фактичній наявності:
-
-```text
-1 товар
-```
-
-У цьому проєкті операції з перевірки та списання stock виконуються транзакційно через Prisma, що забезпечує узгодженість даних при паралельних запитах.
-
----
-
-# Analytics
-
-Backend містить модуль аналітики продажів.
-
-Адміністратор може отримувати інформацію про:
-
-* кількість замовлень;
-* кількість проданих товарів;
-* загальний обсяг продажів;
-* статистику за періодами;
-* популярні товари;
-* статистику категорій.
-
-Також реалізовано експорт звітів у форматі CSV.
-
----
-
-# Тестування
-
-## Unit Tests
-
-Unit-тести покривають критичну бізнес-логіку:
+Unit-тести покривають критичну бізнес-логіку, зокрема:
 
 * authentication;
 * products;
 * cart;
 * orders;
-* транзакційне списання stock;
-* перевірку прав доступу;
-* роботу сервісів.
+* authorization;
+* transaction logic;
+* stock management.
 
-Запуск:
-
-```bash
-npm test
-```
-
----
-
-## E2E Tests
-
-E2E тести перевіряють повний користувацький flow:
+E2E тест перевіряє основний користувацький flow:
 
 ```text
 Registration
-     ↓
-Login
      ↓
 Add product to cart
      ↓
 Create order
      ↓
 Check stock
-     ↓
-Transaction
-     ↓
-Order processing
 ```
 
-Запуск:
+Запуск тестів:
+
+```bash
+npm test
+```
 
 ```bash
 npm run test:e2e
@@ -523,16 +389,11 @@ npm run test:e2e
 
 ---
 
-# CI / CD
+# CI
 
-У репозиторії налаштований **GitHub Actions workflow**.
+У репозиторії налаштований GitHub Actions workflow.
 
-Workflow автоматично запускається при:
-
-* `push`;
-* `pull request`.
-
-Основні етапи:
+На `push` та `pull request` автоматично виконуються:
 
 ```text
 Install dependencies
@@ -541,187 +402,64 @@ npm ci
         ↓
 Lint
         ↓
-Unit Tests
-        ↓
-Integration / E2E Tests
-```
-
-Це дозволяє автоматично перевіряти якість коду та працездатність backend перед внесенням змін у production branch.
-
----
-
-# Security
-
-У проєкті реалізовані базові механізми захисту:
-
-* JWT authentication;
-* Access + Refresh Tokens;
-* HTTP-only cookies для Refresh Token;
-* Refresh Token Rotation;
-* bcrypt для хешування паролів;
-* Role-Based Access Control;
-* DTO validation;
-* `class-validator`;
-* `class-transformer`;
-* `@nestjs/throttler` для rate limiting;
-* Helmet для HTTP security headers;
-* перевірка прав доступу на захищених endpoints.
-
----
-
-# Docker Services
-
-Основні сервіси проєкту:
-
-```text
-┌─────────────────────────────┐
-│       React Frontend        │
-└──────────────┬──────────────┘
-               │
-               │ REST / WebSocket
-               ▼
-┌─────────────────────────────┐
-│       NestJS Backend        │
-└──────┬───────────────┬──────┘
-       │               │
-       │ Prisma        │ BullMQ
-       ▼               ▼
-┌─────────────┐   ┌─────────────┐
-│ PostgreSQL  │   │    Redis    │
-└─────────────┘   └─────────────┘
-```
-
----
-
-# Development Workflow
-
-Рекомендований workflow для розробки:
-
-```text
-Create feature branch
-        ↓
-Implement feature
-        ↓
-Write tests
-        ↓
-Run lint
-        ↓
-Run unit tests
-        ↓
-Run E2E tests
-        ↓
-Commit
-        ↓
-Push
-        ↓
-GitHub Actions
-        ↓
-Pull Request
+Tests
 ```
 
 ---
 
 # Future Improvements
 
-У майбутньому проєкт можна розширити наступними можливостями:
+Можливі подальші покращення:
 
-### Payments
-
-Додати реальну інтеграцію з платіжною системою:
-
-* Stripe;
-* LiqPay.
-
-Поточна реалізація використовує mock/simulation payment flow.
-
-### Search
-
-Замінити поточний пошук через `ILIKE` на повнотекстовий пошук PostgreSQL із використанням:
-
-```text
-tsvector
-tsquery
-GIN index
-```
-
-Це дозволить ефективніше працювати з великим каталогом.
-
-### WebSocket Scaling
-
-При масштабуванні можна винести WebSocket Gateway в окремий мікросервіс.
-
-Також можна використовувати Redis adapter для Socket.IO, щоб підтримувати WebSocket connections між декількома backend instances.
-
-### Observability
-
-Можна додати:
-
-* structured logging;
-* OpenTelemetry;
-* Prometheus;
-* Grafana;
-* error tracking.
+* реальна інтеграція Stripe / LiqPay;
+* Redis adapter для Socket.IO при горизонтальному масштабуванні;
+* Система повідомлень користувачів
 
 ---
 
 # Getting Started
 
-Швидкий запуск проєкту:
+Швидкий запуск:
 
 ```bash
-# Clone repository
 git clone <repository-url>
 
-# Go to backend
 cd backend
 
-# Install dependencies
-npm install
-
-# Create environment file
 cp .env.example .env
 
-# Start all services
 docker compose up --build
 ```
 
-Після запуску:
+Після запуску backend буде доступний за:
 
 ```text
-API:      http://localhost:3001
-Swagger:  http://localhost:3001/api
-Postgres: localhost:5432
-Redis:    localhost:6379
+http://localhost:3001
+```
+
+Swagger:
+
+```text
+http://localhost:3001/api
 ```
 
 ---
 
 # Summary
 
-**Mini Marketplace API** — backend для e-commerce marketplace, побудований на NestJS та TypeScript.
+Mini Marketplace API — backend для e-commerce marketplace, який демонструє роботу з:
 
-Проєкт демонструє реалізацію:
-
-* REST API;
-* JWT authentication;
-* Access + Refresh Tokens;
-* RBAC;
-* PostgreSQL;
-* Prisma ORM;
-* транзакцій;
-* race condition protection;
-* Redis caching;
-* BullMQ queues;
-* Socket.IO;
-* pagination;
-* filtering;
-* search;
-* analytics;
-* CSV export;
-* rate limiting;
-* security middleware;
+* NestJS та TypeScript;
+* PostgreSQL та Prisma;
+* JWT authentication та RBAC;
+* Redis та BullMQ;
+* транзакціями та race condition protection;
+* кешуванням;
+* WebSockets;
+* аналітикою та CSV export;
+* validation та security;
+* edge case handling;
+* logging;
 * unit та E2E testing;
 * Docker;
-* GitHub Actions CI/CD.
-
-Архітектура побудована таким чином, щоб backend залишався модульним, масштабованим та придатним для подальшого розширення.
+* GitHub Actions CI.
