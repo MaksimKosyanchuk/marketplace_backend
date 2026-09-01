@@ -11,6 +11,7 @@ import { join } from 'path';
 import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
 import { QueueModule } from './queue/queue.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 
 @Module({
@@ -33,6 +34,8 @@ import { QueueModule } from './queue/queue.module';
     OrdersModule,
 
     QueueModule,
+
+    AnalyticsModule,
   ],
 
   controllers: [AppController],
