@@ -13,32 +13,31 @@ import { OrdersModule } from './orders/orders.module';
 import { QueueModule } from './queue/queue.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 
-
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
-    }),
-    AuthModule,
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+        }),
+        ServeStaticModule.forRoot({
+            rootPath: join(__dirname, '..', 'uploads'),
+            serveRoot: '/uploads',
+        }),
+        AuthModule,
 
-    CategoriesModule,
+        CategoriesModule,
 
-    ProductsModule,
+        ProductsModule,
 
-    CartModule,
+        CartModule,
 
-    OrdersModule,
+        OrdersModule,
 
-    QueueModule,
+        QueueModule,
 
-    AnalyticsModule,
-  ],
+        AnalyticsModule,
+    ],
 
-  controllers: [AppController],
-  providers: [AppService],
+    controllers: [AppController],
+    providers: [AppService],
 })
 export class AppModule {}

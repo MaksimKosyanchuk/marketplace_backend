@@ -8,13 +8,13 @@ import { OrdersGateway } from './orders.geteway';
 import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [
-    BullModule.registerQueue({
-      name: 'orders',
-    }),
-    AuthModule,
-  ],
-  controllers: [OrdersController],
-  providers: [OrdersService, OrdersProcessor, OrdersGateway],
+    imports: [
+        BullModule.registerQueue({
+            name: 'orders',
+        }),
+        AuthModule,
+    ],
+    controllers: [OrdersController],
+    providers: [OrdersService, OrdersProcessor, OrdersGateway],
 })
 export class OrdersModule {}

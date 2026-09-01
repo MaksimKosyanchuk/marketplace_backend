@@ -3,166 +3,175 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
 
 export interface DateFilterDto {
-  from?: string;
-  to?: string;
+    from?: string;
+    to?: string;
 }
 
 @Injectable()
 export class AnalyticsService {
-  private readonly TIME_ZONE = 'Europe/Kyiv';
+    private readonly TIME_ZONE = 'Europe/Kyiv';
 
-  constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) {}
 
-  private getPaidStatuses(): OrderStatus[] {
-    // Включаем NEW и остальные оплаченные/выполняемые статусы
-    return [
-      OrderStatus.NEW,
-      OrderStatus.PROCESSING,
-      OrderStatus.SHIPPED,
-      OrderStatus.COMPLETED,
-    ];
-  }
-
-  private buildDateFilter(from?: string, to?: string) {
-    const filter: Record<string, any> = {};
-    if (from || to) {
-      filter.createdAt = {};
-      if (from) {
-        filter.createdAt.gte = new Date(`${from}T00:00:00.000Z`);
-      }
-      if (to) {
-        filter.createdAt.lte = new Date(`${to}T23:59:59.999Z`);
-      }
+    private getPaidStatuses(): OrderStatus[] {
+        // Включаем NEW и остальные оплаченные/выполняемые статусы
+        return [
+            OrderStatus.NEW,
+            OrderStatus.PROCESSING,
+            OrderStatus.SHIPPED,
+            OrderStatus.COMPLETED,
+        ];
     }
-    return filter;
-  }
 
-  private formatDateToLocal(date: Date): string {
-    return new Intl.DateTimeFormat('sv-SE', {
-      timeZone: this.TIME_ZONE,
-    }).format(date);
-  }
+    private buildDateFilter(from?: string, to?: string) {
+        const filter: Record<string, any> = {};
+        if (from || to) {
+            filter.createdAt = {};
+            if (from) {
+                filter.createdAt.gte = new Date(`${from}T00:00:00.000Z`);
+            }
+            if (to) {
+                filter.createdAt.lte = new Date(`${to}T23:59:59.999Z`);
+            }
+        }
+        return filter;
+    }
 
-  async getDashboardData(dto: DateFilterDto) {
-    const dateFilter = this.buildDateFilter(dto.from, dto.to);
-    const paidStatuses = this.getPaidStatuses();
+    private formatDateToLocal(date: Date): string {
+        return new Intl.DateTimeFormat('sv-SE', {
+            timeZone: this.TIME_ZONE,
+        }).format(date);
+    }
 
-    // 1. KPI Summary
-    const summaryAgg = await this.prisma.order.aggregate({
-      where: {
-        ...dateFilter,
-        status: { in: paidStatuses },
-      },
-      _sum: { totalAmount: true },
-      _count: { id: true },
-    });
+    async getDashboardData(dto: DateFilterDto) {
+        const dateFilter = this.buildDateFilter(dto.from, dto.to);
+        const paidStatuses = this.getPaidStatuses();
 
-    const totalRevenue = Number(summaryAgg._sum.totalAmount || 0);
-    const totalOrders = summaryAgg._count.id;
-    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+        // 1. KPI Summary
+        const summaryAgg = await this.prisma.order.aggregate({
+            where: {
+                ...dateFilter,
+                status: { in: paidStatuses },
+            },
+            _sum: { totalAmount: true },
+            _count: { id: true },
+        });
 
-    // 2. Top 5 Products
-    const topItems = await this.prisma.orderItem.groupBy({
-      by: ['productId', 'productName'],
-      where: {
-        order: {
-          ...dateFilter,
-          status: { in: paidStatuses },
-        },
-      },
-      _sum: {
-        quantity: true,
-        price: true,
-      },
-      orderBy: {
-        _sum: {
-          quantity: 'desc',
-        },
-      },
-      take: 5,
-    });
+        const totalRevenue = Number(summaryAgg._sum.totalAmount || 0);
+        const totalOrders = summaryAgg._count.id;
+        const averageOrderValue =
+            totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    const topProducts = topItems.map((item) => ({
-      productId: item.productId,
-      productName: item.productName,
-      totalSold: item._sum.quantity || 0,
-      totalRevenue: Number(item._sum.price || 0) * (item._sum.quantity || 0),
-    }));
+        // 2. Top 5 Products
+        const topItems = await this.prisma.orderItem.groupBy({
+            by: ['productId', 'productName'],
+            where: {
+                order: {
+                    ...dateFilter,
+                    status: { in: paidStatuses },
+                },
+            },
+            _sum: {
+                quantity: true,
+                price: true,
+            },
+            orderBy: {
+                _sum: {
+                    quantity: 'desc',
+                },
+            },
+            take: 5,
+        });
 
-    // 3. Sales Timeline (с учетом часового пояса Europe/Kyiv)
-    const orders = await this.prisma.order.findMany({
-      where: {
-        ...dateFilter,
-        status: { in: paidStatuses },
-      },
-      select: {
-        createdAt: true,
-        totalAmount: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+        const topProducts = topItems.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            totalSold: item._sum.quantity || 0,
+            totalRevenue:
+                Number(item._sum.price || 0) * (item._sum.quantity || 0),
+        }));
 
-    const timelineMap = new Map<string, { revenue: number; orders: number }>();
+        // 3. Sales Timeline (с учетом часового пояса Europe/Kyiv)
+        const orders = await this.prisma.order.findMany({
+            where: {
+                ...dateFilter,
+                status: { in: paidStatuses },
+            },
+            select: {
+                createdAt: true,
+                totalAmount: true,
+            },
+            orderBy: { createdAt: 'asc' },
+        });
 
-    orders.forEach((ord) => {
-      const dateKey = this.formatDateToLocal(ord.createdAt);
-      const existing = timelineMap.get(dateKey) || { revenue: 0, orders: 0 };
-      timelineMap.set(dateKey, {
-        revenue: existing.revenue + Number(ord.totalAmount),
-        orders: existing.orders + 1,
-      });
-    });
+        const timelineMap = new Map<
+            string,
+            { revenue: number; orders: number }
+        >();
 
-    const salesTimeline = Array.from(timelineMap.entries()).map(
-      ([date, data]) => ({
-        date,
-        revenue: data.revenue,
-        orders: data.orders,
-      }),
-    );
+        orders.forEach((ord) => {
+            const dateKey = this.formatDateToLocal(ord.createdAt);
+            const existing = timelineMap.get(dateKey) || {
+                revenue: 0,
+                orders: 0,
+            };
+            timelineMap.set(dateKey, {
+                revenue: existing.revenue + Number(ord.totalAmount),
+                orders: existing.orders + 1,
+            });
+        });
 
-    return {
-      summary: {
-        totalRevenue,
-        totalOrders,
-        averageOrderValue,
-      },
-      topProducts,
-      salesTimeline,
-    };
-  }
+        const salesTimeline = Array.from(timelineMap.entries()).map(
+            ([date, data]) => ({
+                date,
+                revenue: data.revenue,
+                orders: data.orders,
+            }),
+        );
 
-  async generateOrdersCsv(dto: DateFilterDto): Promise<string> {
-    const dateFilter = this.buildDateFilter(dto.from, dto.to);
+        return {
+            summary: {
+                totalRevenue,
+                totalOrders,
+                averageOrderValue,
+            },
+            topProducts,
+            salesTimeline,
+        };
+    }
 
-    const orders = await this.prisma.order.findMany({
-      where: dateFilter,
-      include: {
-        user: { select: { email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    async generateOrdersCsv(dto: DateFilterDto): Promise<string> {
+        const dateFilter = this.buildDateFilter(dto.from, dto.to);
 
-    const header = 'Order ID,Date,Customer,Status,Total Amount ($)\n';
-    const rows = orders
-      .map((o) => {
-        const localDate = this.formatDateToLocal(o.createdAt);
-        const localTime = new Intl.DateTimeFormat('sv-SE', {
-          timeZone: this.TIME_ZONE,
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        })
-          .format(o.createdAt)
-          .split(' ')[1] || '00:00:00';
+        const orders = await this.prisma.order.findMany({
+            where: dateFilter,
+            include: {
+                user: { select: { email: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
 
-        const fullFormattedDate = `${localDate} ${localTime}`;
+        const header = 'Order ID,Date,Customer,Status,Total Amount ($)\n';
+        const rows = orders
+            .map((o) => {
+                const localDate = this.formatDateToLocal(o.createdAt);
+                const localTime =
+                    new Intl.DateTimeFormat('sv-SE', {
+                        timeZone: this.TIME_ZONE,
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false,
+                    })
+                        .format(o.createdAt)
+                        .split(' ')[1] || '00:00:00';
 
-        return `"${o.id}","${fullFormattedDate}","${o.user?.email || 'N/A'}","${o.status}",${Number(o.totalAmount).toFixed(2)}`;
-      })
-      .join('\n');
+                const fullFormattedDate = `${localDate} ${localTime}`;
 
-    return header + rows;
-  }
+                return `"${o.id}","${fullFormattedDate}","${o.user?.email || 'N/A'}","${o.status}",${Number(o.totalAmount).toFixed(2)}`;
+            })
+            .join('\n');
+
+        return header + rows;
+    }
 }

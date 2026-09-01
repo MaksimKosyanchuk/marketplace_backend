@@ -9,27 +9,30 @@ import { Roles } from '../common/decorators/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+    constructor(private readonly analyticsService: AnalyticsService) {}
 
-  @Get('dashboard')
-  async getDashboard(
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    return this.analyticsService.getDashboardData({ from, to });
-  }
+    @Get('dashboard')
+    async getDashboard(@Query('from') from?: string, @Query('to') to?: string) {
+        return this.analyticsService.getDashboardData({ from, to });
+    }
 
-  @Get('export/csv')
-  async exportCsv(
-    @Res() res: Response,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    const csvData = await this.analyticsService.generateOrdersCsv({ from, to });
-    const filename = `sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    @Get('export/csv')
+    async exportCsv(
+        @Res() res: Response,
+        @Query('from') from?: string,
+        @Query('to') to?: string,
+    ) {
+        const csvData = await this.analyticsService.generateOrdersCsv({
+            from,
+            to,
+        });
+        const filename = `sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.send(csvData);
-  }
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${filename}"`,
+        );
+        return res.send(csvData);
+    }
 }

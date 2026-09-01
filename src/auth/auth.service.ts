@@ -1,9 +1,8 @@
-
 import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
+    ConflictException,
+    Injectable,
+    Logger,
+    UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -20,149 +19,142 @@ const SALT_ROUNDS = 10;
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+    private readonly logger = new Logger(AuthService.name);
 
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {}
+    constructor(
+        private readonly usersService: UsersService,
+        private readonly jwtService: JwtService,
+        private readonly config: ConfigService,
+        private readonly prisma: PrismaService,
+    ) {}
 
-  async register(dto: RegisterDto) {
-    const existing = await this.usersService.findByEmail(dto.email);
+    async register(dto: RegisterDto) {
+        const existing = await this.usersService.findByEmail(dto.email);
 
-    if (existing) {
-      throw new ConflictException('Email is already registered');
-    }
+        if (existing) {
+            throw new ConflictException('Email is already registered');
+        }
 
-    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+        const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-    const user = await this.usersService.create({
-      email: dto.email,
-      passwordHash,
-      nickName: dto.nickName,
-    });
-
-    this.logger.log(`User registered ${user.id}`);
-
-    return this.issueTokens(user.id, user.email, user.role);
-  }
-
-  async login(dto: LoginDto) {
-    const user = await this.usersService.findByEmail(dto.email);
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const matches = await bcrypt.compare(
-      dto.password,
-      user.passwordHash,
-    );
-
-    if (!matches) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    return this.issueTokens(user.id, user.email, user.role);
-  }
-
-  async refresh(refreshToken: string) {
-    const tokenHash = this.hashToken(refreshToken);
-
-    const stored = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash },
-      include: { user: true },
-    });
-
-    if (!stored || stored.expiresAt < new Date()) {
-      if (stored) {
-        await this.prisma.refreshToken.delete({
-          where: { id: stored.id },
+        const user = await this.usersService.create({
+            email: dto.email,
+            passwordHash,
+            nickName: dto.nickName,
         });
-      }
 
-      throw new UnauthorizedException('Invalid refresh token');
+        this.logger.log(`User registered ${user.id}`);
+
+        return this.issueTokens(user.id, user.email, user.role);
     }
 
-    // Rotate refresh token
-    await this.prisma.refreshToken.delete({
-      where: { id: stored.id },
-    });
+    async login(dto: LoginDto) {
+        const user = await this.usersService.findByEmail(dto.email);
 
-    return this.issueTokens(
-      stored.user.id,
-      stored.user.email,
-      stored.user.role,
-    );
-  }
+        if (!user) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
 
-  async logout(refreshToken: string): Promise<void> {
-    const tokenHash = this.hashToken(refreshToken);
+        const matches = await bcrypt.compare(dto.password, user.passwordHash);
 
-    await this.prisma.refreshToken.deleteMany({
-      where: { tokenHash },
-    });
-  }
+        if (!matches) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
 
-  async me(userId: string) {
-    const user = await this.usersService.findByIdOrThrow(userId);
+        return this.issueTokens(user.id, user.email, user.role);
+    }
 
-    return {
-      id: user.id,
-      email: user.email,
-      nickName: user.nickName,
-      role: user.role,
-    };
-  }
+    async refresh(refreshToken: string) {
+        const tokenHash = this.hashToken(refreshToken);
 
-  private async issueTokens(
-    userId: string,
-    email: string,
-    role: JwtPayload['role'],
-  ) {
-    const payload: JwtPayload = {
-      sub: userId,
-      email,
-      role,
-    };
+        const stored = await this.prisma.refreshToken.findUnique({
+            where: { tokenHash },
+            include: { user: true },
+        });
 
-    const accessToken = await this.jwtService.signAsync(payload);
+        if (!stored || stored.expiresAt < new Date()) {
+            if (stored) {
+                await this.prisma.refreshToken.delete({
+                    where: { id: stored.id },
+                });
+            }
 
-    const refreshToken = randomBytes(48).toString('hex');
+            throw new UnauthorizedException('Invalid refresh token');
+        }
 
-    const days = this.parseDurationDays(
-      this.config.get<string>('JWT_REFRESH_EXPIRES', '7d'),
-    );
+        // Rotate refresh token
+        await this.prisma.refreshToken.delete({
+            where: { id: stored.id },
+        });
 
-    const expiresAt = new Date(
-      Date.now() + days * 24 * 60 * 60 * 1000,
-    );
+        return this.issueTokens(
+            stored.user.id,
+            stored.user.email,
+            stored.user.role,
+        );
+    }
 
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash: this.hashToken(refreshToken),
-        userId,
-        expiresAt,
-      },
-    });
+    async logout(refreshToken: string): Promise<void> {
+        const tokenHash = this.hashToken(refreshToken);
 
-    return {
-      accessToken,
-      refreshToken,
-    };
-  }
+        await this.prisma.refreshToken.deleteMany({
+            where: { tokenHash },
+        });
+    }
 
-  private hashToken(token: string): string {
-    return createHash('sha256')
-      .update(token)
-      .digest('hex');
-  }
+    async me(userId: string) {
+        const user = await this.usersService.findByIdOrThrow(userId);
 
-  private parseDurationDays(value: string): number {
-    const match = /^(\d+)d$/.exec(value);
+        return {
+            id: user.id,
+            email: user.email,
+            nickName: user.nickName,
+            role: user.role,
+        };
+    }
 
-    return match ? Number(match[1]) : 7;
-  }
+    private async issueTokens(
+        userId: string,
+        email: string,
+        role: JwtPayload['role'],
+    ) {
+        const payload: JwtPayload = {
+            sub: userId,
+            email,
+            role,
+        };
+
+        const accessToken = await this.jwtService.signAsync(payload);
+
+        const refreshToken = randomBytes(48).toString('hex');
+
+        const days = this.parseDurationDays(
+            this.config.get<string>('JWT_REFRESH_EXPIRES', '7d'),
+        );
+
+        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+        await this.prisma.refreshToken.create({
+            data: {
+                tokenHash: this.hashToken(refreshToken),
+                userId,
+                expiresAt,
+            },
+        });
+
+        return {
+            accessToken,
+            refreshToken,
+        };
+    }
+
+    private hashToken(token: string): string {
+        return createHash('sha256').update(token).digest('hex');
+    }
+
+    private parseDurationDays(value: string): number {
+        const match = /^(\d+)d$/.exec(value);
+
+        return match ? Number(match[1]) : 7;
+    }
 }

@@ -4,29 +4,28 @@ import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+    constructor(private readonly usersRepository: UsersRepository) {}
 
-  findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findByEmail(email.toLowerCase());
-  }
-
-  async findByIdOrThrow(id: string): Promise<User> {
-    const user = await this.usersRepository.findById(id);
-    if (!user) {
-      throw new NotFoundException('User not found');
+    findByEmail(email: string): Promise<User | null> {
+        return this.usersRepository.findByEmail(email.toLowerCase());
     }
-    return user;
-  }
-  
 
-  create(data: {
-    email: string;
-    passwordHash: string;
-    nickName: string;
-  }): Promise<User> {
-    return this.usersRepository.create({
-      ...data,
-      email: data.email.toLowerCase(),
-    });
-  }
+    async findByIdOrThrow(id: string): Promise<User> {
+        const user = await this.usersRepository.findById(id);
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+        return user;
+    }
+
+    create(data: {
+        email: string;
+        passwordHash: string;
+        nickName: string;
+    }): Promise<User> {
+        return this.usersRepository.create({
+            ...data,
+            email: data.email.toLowerCase(),
+        });
+    }
 }

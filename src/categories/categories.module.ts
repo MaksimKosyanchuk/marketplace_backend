@@ -5,8 +5,8 @@ import { CategoriesService } from './categories.service';
 import { RedisModule } from 'src/redis/redis.module';
 
 @Module({
-  imports: [RedisModule],
-  controllers: [CategoriesController],
-  providers: [CategoriesService],
+    imports: [RedisModule],
+    controllers: [CategoriesController],
+    providers: [CategoriesService],
 })
 export class CategoriesModule {}

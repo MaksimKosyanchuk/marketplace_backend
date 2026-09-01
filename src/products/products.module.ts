@@ -5,8 +5,8 @@ import { ProductsService } from './products.service';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({
-  imports: [RedisModule],
-  controllers: [ProductsController],
-  providers: [ProductsService],
+    imports: [RedisModule],
+    controllers: [ProductsController],
+    providers: [ProductsService],
 })
 export class ProductsModule {}
