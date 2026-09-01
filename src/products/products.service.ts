@@ -10,7 +10,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductSort, QueryProductDto } from './dto/query-product.dto';
 import { Prisma } from '@prisma/client';
 import { deleteFile } from '../common/utils/file';
-import { LoggerService } from '../logger/logger.service';
+import { LoggerService } from '../logger/logger.service';;
 
 @Injectable()
 export class ProductsService {

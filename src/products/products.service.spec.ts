@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { ProductSort } from './dto/query-product.dto';
 import { ProductsService } from './products.service';
+import { LoggerService } from '../logger/logger.service';
 import * as fileUtils from '../common/utils/file';
 
 jest.mock('../common/utils/file', () => ({
@@ -68,6 +69,16 @@ describe('ProductsService', () => {
                 {
                     provide: RedisService,
                     useValue: mockRedisService,
+                },
+                {
+                    provide: LoggerService,
+                    useValue: {
+                        log: jest.fn(),
+                        error: jest.fn(),
+                        warn: jest.fn(),
+                        debug: jest.fn(),
+                        verbose: jest.fn(),
+                    },
                 },
             ],
         }).compile();

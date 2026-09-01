@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoggerService } from '../logger/logger.service';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
@@ -40,6 +41,9 @@ describe('AuthService', () => {
     };
 
     const mockPrismaService = {
+        user: {
+            count: jest.fn().mockResolvedValue(1)
+        },
         refreshToken: {
             findUnique: jest.fn(),
             delete: jest.fn(),
@@ -59,6 +63,16 @@ describe('AuthService', () => {
                 { provide: JwtService, useValue: mockJwtService },
                 { provide: ConfigService, useValue: mockConfigService },
                 { provide: PrismaService, useValue: mockPrismaService },
+                {
+                    provide: LoggerService,
+                    useValue: {
+                        log: jest.fn(),
+                        error: jest.fn(),
+                        warn: jest.fn(),
+                        debug: jest.fn(),
+                        verbose: jest.fn(),
+                    },
+                },
             ],
         }).compile();
 
@@ -112,6 +126,7 @@ describe('AuthService', () => {
                 email: registerDto.email,
                 passwordHash: 'hashed_password',
                 nickName: registerDto.nickName,
+                role: "CUSTOMER",
             });
 
             expect(jwtService.signAsync).toHaveBeenCalledWith({

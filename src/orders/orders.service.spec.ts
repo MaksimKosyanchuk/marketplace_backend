@@ -8,6 +8,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
+import { LoggerService } from '../logger/logger.service';
 
 describe('OrdersService', () => {
     let service: OrdersService;
@@ -83,6 +84,16 @@ describe('OrdersService', () => {
                 {
                     provide: PrismaService,
                     useValue: mockPrismaService,
+                },
+                {
+                    provide: LoggerService,
+                    useValue: {
+                        log: jest.fn(),
+                        error: jest.fn(),
+                        warn: jest.fn(),
+                        debug: jest.fn(),
+                        verbose: jest.fn(),
+                    },
                 },
                 {
                     provide: getQueueToken('orders'),
