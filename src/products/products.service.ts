@@ -50,6 +50,7 @@ export class ProductsService {
     async findAll(query: QueryProductDto): Promise<PaginatedProductsResult> {
         const cacheKey = this.CACHE_PREFIX + JSON.stringify(query);
         const cached = await this.redis.get(cacheKey);
+
         if (cached) {
             return JSON.parse(cached) as PaginatedProductsResult;
         }
@@ -101,6 +102,7 @@ export class ProductsService {
         };
 
         await this.redis.set(cacheKey, JSON.stringify(result), this.CACHE_TTL);
+
         return result;
     }
 
