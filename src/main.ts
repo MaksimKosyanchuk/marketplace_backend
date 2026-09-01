@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const port = process.env.PORT ?? 3000;
+    const port = process.env.PORT ?? 3001;
 
     app.enableCors({
         origin: [clientUrl],
@@ -41,14 +41,14 @@ async function bootstrap() {
                 description: 'Введите JWT токен',
                 in: 'header',
             },
-            'JWT-auth', // Название схемы для декоратора @ApiBearerAuth('JWT-auth')
+            'JWT-auth',
         )
         .build();
 
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document, {
         swaggerOptions: {
-            persistAuthorization: true, // Сохраняет токен при перезагрузке страницы
+            persistAuthorization: true,
         },
     });
 
