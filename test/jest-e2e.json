@@ -19,5 +19,7 @@
     "^src/(.*)$": "<rootDir>/../src/$1"
   },
   "setupFiles": ["dotenv/config"],
-  "setupFilesAfterEnv": ["<rootDir>/jest-setup.ts"]
+  "globals": {
+    "process.env.DOTENV_CONFIG_PATH": "../.env.example"
+  }
 }
