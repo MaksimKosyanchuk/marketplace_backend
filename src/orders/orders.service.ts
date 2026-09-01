@@ -1,4 +1,3 @@
-// orders.service.ts
 import {
     BadRequestException,
     ForbiddenException,
@@ -65,7 +64,7 @@ export class OrdersService {
             const newOrder = await tx.order.create({
                 data: {
                     userId,
-                    status: OrderStatus.NEW, // заказ создан, ждёт оплаты
+                    status: OrderStatus.NEW,
                     totalAmount,
                     items: { createMany: { data: orderItemsData } },
                 },
@@ -94,9 +93,14 @@ export class OrdersService {
 
         if (order.status !== OrderStatus.NEW) {
             throw new BadRequestException(
-                `Order is already ${order.status.toLowerCase()}, cannot pay again`,
+                `Order cannot be paid in status ${order.status}`,
             );
         }
+
+        await this.prisma.order.update({
+            where: { id: orderId },
+            data: { status: OrderStatus.PAYMENT_PENDING },
+        });
 
         const payment = this.mockChargePayment(order.totalAmount);
 
@@ -106,6 +110,11 @@ export class OrdersService {
                 'Payment failed, order cancelled and stock restored',
             );
         }
+
+        await this.prisma.order.update({
+            where: { id: orderId },
+            data: { status: OrderStatus.PROCESSING },
+        });
 
         await this.ordersQueue.add('process-order', { orderId: order.id });
 
@@ -143,6 +152,12 @@ export class OrdersService {
             );
         }
 
+        if (order.status === OrderStatus.PAYMENT_PENDING) {
+            throw new BadRequestException(
+                'Cannot cancel order while payment is processing',
+            );
+        }
+
         return this.finalizeCancellation(order);
     }
 
@@ -156,7 +171,6 @@ export class OrdersService {
             throw new BadRequestException('Cannot cancel a completed order');
         }
 
-        // если заказ был уже оплачен (не NEW) — делаем мок-возврат средств
         let refund: { success: boolean; refundId: string } | null = null;
         if (order.status !== OrderStatus.NEW) {
             refund = this.mockRefundPayment(order.totalAmount);
@@ -268,19 +282,25 @@ export class OrdersService {
             throw new NotFoundException('Order not found');
         }
 
-        // 1. Нельзя перевести обратно в NEW
-        if (dto.status === OrderStatus.NEW) {
+        if (
+            dto.status === OrderStatus.NEW ||
+            dto.status === OrderStatus.PAYMENT_PENDING
+        ) {
             throw new BadRequestException(
-                'Cannot manually set status back to NEW',
+                `Cannot manually set status to ${dto.status}`,
             );
         }
 
-        // 2. Если статус не меняется — возвращаем как есть
         if (order.status === dto.status) {
             return order;
         }
 
-        // 3. Завершенный или отмененный заказ менять нельзя
+        if (order.status === OrderStatus.PAYMENT_PENDING) {
+            throw new BadRequestException(
+                'Cannot change status while payment is in progress',
+            );
+        }
+
         if (
             order.status === OrderStatus.CANCELLED ||
             order.status === OrderStatus.COMPLETED
@@ -290,7 +310,6 @@ export class OrdersService {
             );
         }
 
-        // 4. Если заказ NEW (неоплачен) — его можно только CANCELLED
         if (
             order.status === OrderStatus.NEW &&
             dto.status !== OrderStatus.CANCELLED
@@ -300,31 +319,10 @@ export class OrdersService {
             );
         }
 
-        // 5. Обработка отмены
         if (dto.status === OrderStatus.CANCELLED) {
-            const isPaid = order.status !== OrderStatus.NEW;
-
-            if (isPaid) {
-                this.mockRefundPayment(order.totalAmount);
-            }
-
-            return this.prisma.$transaction(async (tx) => {
-                for (const item of order.items) {
-                    await tx.product.update({
-                        where: { id: item.productId },
-                        data: { stock: { increment: item.quantity } },
-                    });
-                }
-
-                return tx.order.update({
-                    where: { id: orderId },
-                    data: { status: OrderStatus.CANCELLED },
-                    include: { items: true },
-                });
-            });
+            return (await this.finalizeCancellation(order)).order;
         }
 
-        // 6. Смена на остальные статусы (PROCESSING, SHIPPED, COMPLETED и т.д.)
         return this.prisma.order.update({
             where: { id: orderId },
             data: { status: dto.status },

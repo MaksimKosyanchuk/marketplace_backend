@@ -15,6 +15,7 @@ enum Role {
 enum OrderStatus {
   NEW
   PROCESSING
+  PAYMENT_PENDING
   SHIPPED
   COMPLETED
   CANCELLED
