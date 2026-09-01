@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -39,7 +39,7 @@ describe('Order Creation Flow (e2e)', () => {
             .send({
                 email: 'customer@example.com',
                 password: 'Password123!',
-                name: 'Test Customer',
+                nickName: 'Test Customer',
             })
             .expect(201);
 
@@ -75,7 +75,7 @@ describe('Order Creation Flow (e2e)', () => {
 
     it('Критичний флоу: додавання в кошик -> оформлення замовлення -> списування stock', async () => {
         await request(app.getHttpServer())
-            .post('/cart')
+            .post('/cart/items')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
                 productId: testProductId,
@@ -93,7 +93,7 @@ describe('Order Creation Flow (e2e)', () => {
         expect(cartRes.body.items[0].quantity).toBe(BUY_QUANTITY);
 
         const orderRes = await request(app.getHttpServer())
-            .post('/orders')
+            .post('/orders/checkout')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
                 shippingAddress: 'Main St 123, Kyiv',
@@ -113,7 +113,6 @@ describe('Order Creation Flow (e2e)', () => {
         const updatedProduct = await prisma.product.findUnique({
             where: { id: testProductId },
         });
-
 
         const expectedStock = INITIAL_STOCK - BUY_QUANTITY;
         expect(updatedProduct?.stock).toBe(expectedStock);
