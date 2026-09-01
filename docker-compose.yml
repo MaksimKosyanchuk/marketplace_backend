@@ -29,11 +29,12 @@ services:
         build: .
         container_name: marketplace-backend
         restart: unless-stopped
-        command: npm run start:dev
+        command: sh -c "npx prisma migrate deploy && npm run start:dev"
         ports:
-            - '3000:3000'
+            - '3001:3001'
         environment:
             - NODE_ENV=development
+            - PORT=3001
             - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/marketplace?schema=public
             - REDIS_HOST=redis
             - REDIS_PORT=6379

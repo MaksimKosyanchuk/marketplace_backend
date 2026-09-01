@@ -14,6 +14,7 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './types/jwt-payload';
+import { Role } from '@prisma/client/edge';
 
 const SALT_ROUNDS = 10;
 
@@ -35,12 +36,17 @@ export class AuthService {
             throw new ConflictException('Email is already registered');
         }
 
+        const userCount = await this.prisma.user.count();
+
+        const role = userCount === 0 ? Role.ADMIN : Role.CUSTOMER;
+
         const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
         const user = await this.usersService.create({
             email: dto.email,
             passwordHash,
             nickName: dto.nickName,
+            role
         });
 
         this.logger.log(`User registered ${user.id}`);
