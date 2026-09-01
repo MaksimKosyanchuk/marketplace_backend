@@ -17,7 +17,11 @@ export const productMulterOptions = {
             cb(null, uniqueName);
         },
     }),
-    fileFilter: (_req: Request, file: Express.Multer.File, cb: MulterCallback): void => {
+    fileFilter: (
+        _req: Request,
+        file: Express.Multer.File,
+        cb: MulterCallback,
+    ): void => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
             cb(
                 new BadRequestException(

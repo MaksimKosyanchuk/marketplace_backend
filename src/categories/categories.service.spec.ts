@@ -17,40 +17,19 @@ describe('CategoriesService', () => {
 
     const mockPrismaService = {
         category: {
-            findUnique: jest.fn<
-                ReturnType<PrismaService['category']['findUnique']>,
-                Parameters<PrismaService['category']['findUnique']>
-            >(),
-            findMany: jest.fn<
-                ReturnType<PrismaService['category']['findMany']>,
-                Parameters<PrismaService['category']['findMany']>
-            >(),
-            create: jest.fn<
-                ReturnType<PrismaService['category']['create']>,
-                Parameters<PrismaService['category']['create']>
-            >(),
-            update: jest.fn<
-                ReturnType<PrismaService['category']['update']>,
-                Parameters<PrismaService['category']['update']>
-            >(),
-            delete: jest.fn<
-                ReturnType<PrismaService['category']['delete']>,
-                Parameters<PrismaService['category']['delete']>
-            >(),
+            findUnique: jest.fn(),
+            findMany: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
         },
         product: {
-            count: jest.fn<
-                ReturnType<PrismaService['product']['count']>,
-                Parameters<PrismaService['product']['count']>
-            >(),
+            count: jest.fn(),
         },
     };
 
     const mockRedisService = {
-        delByPattern: jest.fn<
-            ReturnType<RedisService['delByPattern']>,
-            Parameters<RedisService['delByPattern']>
-        >(),
+        delByPattern: jest.fn(),
     };
 
     beforeEach(async () => {
