@@ -1,98 +1,727 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Mini Marketplace API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend частина застосунку електронної комерції (маркетплейс) з адмін-панеллю, підтримкою черг, кешуванням та транзакційним списанням складу.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Застосунок реалізований на **NestJS + TypeScript**, використовує **PostgreSQL** як основну базу даних, **Prisma ORM** для роботи з нею, **Redis + BullMQ** для асинхронної обробки замовлень та **Socket.IO** для real-time оновлень.
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Стек
 
-## Project setup
+* NestJS
+* TypeScript
+* PostgreSQL
+* Prisma ORM
+* Redis & BullMQ
+* Socket.IO
+* JWT (Access + Refresh)
+* bcrypt
+* class-validator & class-transformer
+* @nestjs/throttler
+* Helmet
+* Jest
+* Docker & Docker Compose
+* GitHub Actions
 
-```bash
-$ npm install
+---
+
+# Архітектура
+
+Застосунок побудований за модульною клієнт-серверною архітектурою:
+
+```text
+React Frontend
+      │
+      │ REST API / WebSocket
+      ▼
+NestJS Backend ──(BullMQ)──► Redis (Async Queue)
+      │
+      │ Prisma ORM (Transactions)
+      ▼
+PostgreSQL
 ```
 
-## Compile and run the project
+Backend відповідає за:
 
-```bash
-# development
-$ npm run start
+* аутентифікацію та рольову модель (RBAC: `CUSTOMER`, `ADMIN`);
+* управління каталогом товарів (CRUD, пагінація, фільтрація, повнотекстовий пошук);
+* управління категоріями;
+* керування кошиком користувача;
+* транзакційне оформлення замовлень із захистом від race conditions;
+* асинхронну обробку замовлень через черги (BullMQ);
+* симуляцію платежів;
+* real-time оновлення статусів замовлень через Socket.IO;
+* аналітику продажу та експорт звітів у CSV.
 
-# watch mode
-$ npm run start:dev
+---
 
-# production mode
-$ npm run start:prod
+# База даних та транзакції
+
+Для зберігання даних використовується **PostgreSQL**.
+
+## Ключові особливості реалізації
+
+### 1. Атомарність списання складу
+
+Оформлення замовлення відбувається всередині єдиної транзакції бази даних через `prisma.$transaction`.
+
+Перед списанням залишків перевіряється актуальна кількість товару на складі.
+
+Це забезпечує коректне списання товарів навіть при одночасному оформленні декількох замовлень та захищає систему від race conditions і продажу товару понад наявний залишок.
+
+### 2. Індексація
+
+Для оптимізації пошуку та фільтрації за каталогом додано індекси на поля:
+
+* `name`
+* `categoryId`
+* `price`
+* `createdAt`
+
+---
+
+# Аутентифікація та RBAC
+
+Для захисту роутів використовується двохрівнева система токенів.
+
+### Access Token
+
+**JWT Access Token** передається в заголовку:
+
+```http
+Authorization: Bearer <token>
 ```
 
-## Run tests
+### Refresh Token
 
-```bash
-# unit tests
-$ npm run test
+**JWT Refresh Token** зберігається в безпечному `HTTP-only` cookie з підтримкою ротації.
 
-# e2e tests
-$ npm run test:e2e
+---
 
-# test coverage
-$ npm run test:cov
+## Ролі
+
+### `CUSTOMER`
+
+Покупець має можливість:
+
+* переглядати каталог;
+* переглядати товари;
+* керувати власним кошиком;
+* створювати замовлення;
+* переглядати власні замовлення.
+
+### `ADMIN`
+
+Адміністратор має можливість:
+
+* створювати товари;
+* редагувати товари;
+* видаляти товари;
+* створювати та редагувати категорії;
+* переглядати всі замовлення;
+* змінювати статуси замовлень;
+* переглядати аналітику продажів;
+* експортувати звіти.
+
+Для захисту від brute-force атак на authentication endpoints використовується `@nestjs/throttler`.
+
+---
+
+# Кешування та черги
+
+Для роботи з Redis використовується **Redis + BullMQ**.
+
+## Кешування каталогу
+
+Запити на отримання публічного списку товарів кешуються в Redis.
+
+Кеш автоматично інвалідується при адміністративних змінах каталогу:
+
+* створення товару;
+* оновлення товару;
+* видалення товару.
+
+Це дозволяє зменшити кількість запитів до PostgreSQL при частому перегляді каталогу.
+
+---
+
+## Асинхронна обробка замовлень
+
+Після того як замовлення успішно створено та склад списано, задача передається в чергу **BullMQ** для фонової обробки.
+
+Черга відповідає за асинхронні операції, зокрема:
+
+* генерацію нотифікацій;
+* подальшу обробку замовлення;
+* переведення статусу з `NEW` у `PROCESSING`.
+
+Таким чином, довгі або другорядні операції не блокують основний HTTP-запит користувача.
+
+---
+
+# Real-time оновлення
+
+Для real-time комунікації використовується **Socket.IO Gateway**.
+
+Клієнти можуть підключитися до WebSocket та отримувати миттєві оновлення про зміну статусів замовлення без необхідності перезавантажувати сторінку.
+
+Життєвий цикл замовлення:
+
+```text
+NEW
+ │
+ ▼
+PROCESSING
+ │
+ ▼
+SHIPPED
+ │
+ ▼
+COMPLETED
 ```
 
-## Deployment
+У випадку скасування:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+NEW / PROCESSING
+        │
+        ▼
+    CANCELLED
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+# Environment Variables
 
-Check out a few resources that may come in handy when working with NestJS:
+Для запуску створіть `.env` на основі `.env.example`:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/marketplace?schema=public"
 
-## Support
+REDIS_PORT=6379
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+JWT_ACCESS_SECRET="access_secret_key"
+JWT_REFRESH_SECRET="refresh_secret_key"
 
-## Stay in touch
+PORT=3001
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+# Запуск через Docker
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Усі необхідні сервіси:
+
+* NestJS Backend
+* PostgreSQL
+* Redis
+
+можна запустити через Docker Compose.
+
+У директорії `backend` виконайте:
+
+```bash
+docker compose up --build
+```
+
+Після запуску будуть доступні:
+
+```text
+Backend API:  http://localhost:3001
+PostgreSQL:   localhost:5432
+Redis:        localhost:6379
+```
+
+Міграції Prisma застосовуються автоматично під час запуску контейнера.
+
+---
+
+## Зупинка Docker
+
+```bash
+docker compose down
+```
+
+Для повного очищення даних разом із Docker volumes:
+
+```bash
+docker compose down -v
+```
+
+> ⚠️ Команда `docker compose down -v` видаляє volume PostgreSQL, а разом із ним і дані бази.
+
+---
+
+# Локальний запуск без Docker
+
+Для локального запуску необхідно встановити:
+
+* Node.js
+* PostgreSQL
+* Redis
+
+### 1. Встановлення залежностей
+
+```bash
+npm install
+```
+
+### 2. Створення `.env`
+
+```bash
+cp .env.example .env
+```
+
+Після цього налаштуйте необхідні environment variables.
+
+### 3. Застосування Prisma migrations
+
+```bash
+npx prisma migrate dev
+```
+
+### 4. Запуск у development mode
+
+```bash
+npm run start:dev
+```
+
+---
+
+# Prisma
+
+Для роботи з базою даних використовується **Prisma ORM**.
+
+Основна Prisma schema знаходиться за адресою:
+
+```text
+prisma/schema.prisma
+```
+
+Для створення нової migration:
+
+```bash
+npx prisma migrate dev --name migration_name
+```
+
+Для генерації Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+Для відкриття Prisma Studio:
+
+```bash
+npx prisma studio
+```
+
+---
+
+# Документація API
+
+Для API використовується **Swagger**.
+
+Після запуску backend документація доступна за адресою:
+
+```text
+http://localhost:3001/api
+```
+
+Swagger дозволяє:
+
+* переглядати всі API endpoints;
+* переглядати DTO;
+* переглядати параметри запитів;
+* тестувати API безпосередньо з браузера.
+
+---
+
+# API Features
+
+## Authentication
+
+Backend підтримує:
+
+* реєстрацію;
+* авторизацію;
+* JWT Access Tokens;
+* JWT Refresh Tokens;
+* refresh token rotation;
+* logout;
+* захищені endpoints;
+* RBAC;
+* throttling authentication endpoints.
+
+---
+
+## Products
+
+Підтримується:
+
+* створення товарів;
+* редагування товарів;
+* видалення товарів;
+* перегляд товару;
+* отримання списку товарів;
+* пагінація;
+* фільтрація;
+* сортування;
+* пошук;
+* категоризація;
+* кешування каталогу.
+
+Публічний каталог доступний без авторизації.
+
+Адміністративні операції доступні тільки користувачам з роллю `ADMIN`.
+
+---
+
+## Categories
+
+Адміністратор може:
+
+* створювати категорії;
+* редагувати категорії;
+* видаляти категорії;
+* переглядати категорії.
+
+Категорії використовуються для організації каталогу товарів та фільтрації.
+
+---
+
+## Cart
+
+Авторизований користувач може:
+
+* додавати товари до кошика;
+* змінювати кількість товару;
+* видаляти товари;
+* переглядати поточний кошик.
+
+Для роботи з кошиком користувач повинен бути авторизований.
+
+---
+
+## Orders
+
+Під час оформлення замовлення:
+
+1. Перевіряється кошик користувача.
+2. Перевіряється актуальний stock товарів.
+3. Створюється замовлення.
+4. Створюються order items.
+5. Зі складу списується необхідна кількість товарів.
+6. Всі операції виконуються в рамках транзакції.
+7. Після успішної транзакції створюється BullMQ job.
+8. Замовлення переходить до подальшої асинхронної обробки.
+9. Клієнт отримує real-time оновлення через Socket.IO.
+
+---
+
+# Захист від Race Conditions
+
+Критична частина системи — оформлення замовлення та списання товарів зі складу.
+
+Приклад проблеми:
+
+```text
+Stock = 1
+
+User A → купує товар
+User B → купує товар одночасно
+```
+
+Без правильної транзакційної логіки обидва запити можуть побачити:
+
+```text
+stock = 1
+```
+
+і обидва успішно створити замовлення.
+
+У результаті система продасть:
+
+```text
+2 товари
+```
+
+при фактичній наявності:
+
+```text
+1 товар
+```
+
+У цьому проєкті операції з перевірки та списання stock виконуються транзакційно через Prisma, що забезпечує узгодженість даних при паралельних запитах.
+
+---
+
+# Analytics
+
+Backend містить модуль аналітики продажів.
+
+Адміністратор може отримувати інформацію про:
+
+* кількість замовлень;
+* кількість проданих товарів;
+* загальний обсяг продажів;
+* статистику за періодами;
+* популярні товари;
+* статистику категорій.
+
+Також реалізовано експорт звітів у форматі CSV.
+
+---
+
+# Тестування
+
+## Unit Tests
+
+Unit-тести покривають критичну бізнес-логіку:
+
+* authentication;
+* products;
+* cart;
+* orders;
+* транзакційне списання stock;
+* перевірку прав доступу;
+* роботу сервісів.
+
+Запуск:
+
+```bash
+npm test
+```
+
+---
+
+## E2E Tests
+
+E2E тести перевіряють повний користувацький flow:
+
+```text
+Registration
+     ↓
+Login
+     ↓
+Add product to cart
+     ↓
+Create order
+     ↓
+Check stock
+     ↓
+Transaction
+     ↓
+Order processing
+```
+
+Запуск:
+
+```bash
+npm run test:e2e
+```
+
+---
+
+# CI / CD
+
+У репозиторії налаштований **GitHub Actions workflow**.
+
+Workflow автоматично запускається при:
+
+* `push`;
+* `pull request`.
+
+Основні етапи:
+
+```text
+Install dependencies
+        ↓
+npm ci
+        ↓
+Lint
+        ↓
+Unit Tests
+        ↓
+Integration / E2E Tests
+```
+
+Це дозволяє автоматично перевіряти якість коду та працездатність backend перед внесенням змін у production branch.
+
+---
+
+# Security
+
+У проєкті реалізовані базові механізми захисту:
+
+* JWT authentication;
+* Access + Refresh Tokens;
+* HTTP-only cookies для Refresh Token;
+* Refresh Token Rotation;
+* bcrypt для хешування паролів;
+* Role-Based Access Control;
+* DTO validation;
+* `class-validator`;
+* `class-transformer`;
+* `@nestjs/throttler` для rate limiting;
+* Helmet для HTTP security headers;
+* перевірка прав доступу на захищених endpoints.
+
+---
+
+# Docker Services
+
+Основні сервіси проєкту:
+
+```text
+┌─────────────────────────────┐
+│       React Frontend        │
+└──────────────┬──────────────┘
+               │
+               │ REST / WebSocket
+               ▼
+┌─────────────────────────────┐
+│       NestJS Backend        │
+└──────┬───────────────┬──────┘
+       │               │
+       │ Prisma        │ BullMQ
+       ▼               ▼
+┌─────────────┐   ┌─────────────┐
+│ PostgreSQL  │   │    Redis    │
+└─────────────┘   └─────────────┘
+```
+
+---
+
+# Development Workflow
+
+Рекомендований workflow для розробки:
+
+```text
+Create feature branch
+        ↓
+Implement feature
+        ↓
+Write tests
+        ↓
+Run lint
+        ↓
+Run unit tests
+        ↓
+Run E2E tests
+        ↓
+Commit
+        ↓
+Push
+        ↓
+GitHub Actions
+        ↓
+Pull Request
+```
+
+---
+
+# Future Improvements
+
+У майбутньому проєкт можна розширити наступними можливостями:
+
+### Payments
+
+Додати реальну інтеграцію з платіжною системою:
+
+* Stripe;
+* LiqPay.
+
+Поточна реалізація використовує mock/simulation payment flow.
+
+### Search
+
+Замінити поточний пошук через `ILIKE` на повнотекстовий пошук PostgreSQL із використанням:
+
+```text
+tsvector
+tsquery
+GIN index
+```
+
+Це дозволить ефективніше працювати з великим каталогом.
+
+### WebSocket Scaling
+
+При масштабуванні можна винести WebSocket Gateway в окремий мікросервіс.
+
+Також можна використовувати Redis adapter для Socket.IO, щоб підтримувати WebSocket connections між декількома backend instances.
+
+### Observability
+
+Можна додати:
+
+* structured logging;
+* OpenTelemetry;
+* Prometheus;
+* Grafana;
+* error tracking.
+
+---
+
+# Getting Started
+
+Швидкий запуск проєкту:
+
+```bash
+# Clone repository
+git clone <repository-url>
+
+# Go to backend
+cd backend
+
+# Install dependencies
+npm install
+
+# Create environment file
+cp .env.example .env
+
+# Start all services
+docker compose up --build
+```
+
+Після запуску:
+
+```text
+API:      http://localhost:3001
+Swagger:  http://localhost:3001/api
+Postgres: localhost:5432
+Redis:    localhost:6379
+```
+
+---
+
+# Summary
+
+**Mini Marketplace API** — backend для e-commerce marketplace, побудований на NestJS та TypeScript.
+
+Проєкт демонструє реалізацію:
+
+* REST API;
+* JWT authentication;
+* Access + Refresh Tokens;
+* RBAC;
+* PostgreSQL;
+* Prisma ORM;
+* транзакцій;
+* race condition protection;
+* Redis caching;
+* BullMQ queues;
+* Socket.IO;
+* pagination;
+* filtering;
+* search;
+* analytics;
+* CSV export;
+* rate limiting;
+* security middleware;
+* unit та E2E testing;
+* Docker;
+* GitHub Actions CI/CD.
+
+Архітектура побудована таким чином, щоб backend залишався модульним, масштабованим та придатним для подальшого розширення.
