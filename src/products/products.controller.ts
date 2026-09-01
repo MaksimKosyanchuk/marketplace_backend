@@ -50,8 +50,12 @@ export class ProductsController {
         description: 'Список товаров успешно получен',
         type: PaginatedProductsResponseDto,
     })
-    findAll(@Query() query: QueryProductDto) {
-        return this.productsService.findAll(query);
+    findAll(
+        @Query() query: QueryProductDto,
+    ): Promise<PaginatedProductsResponseDto> {
+        return this.productsService.findAll(
+            query,
+        ) as unknown as Promise<PaginatedProductsResponseDto>;
     }
 
     @Get(':id')
@@ -63,8 +67,10 @@ export class ProductsController {
         type: ProductResponseDto,
     })
     @ApiResponse({ status: 404, description: 'Товар не найден' })
-    findOne(@Param('id') id: string) {
-        return this.productsService.findOne(id);
+    findOne(@Param('id') id: string): Promise<ProductResponseDto> {
+        return this.productsService.findOne(
+            id,
+        ) as unknown as Promise<ProductResponseDto>;
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -92,11 +98,14 @@ export class ProductsController {
     create(
         @Body() dto: CreateProductDto,
         @UploadedFile() file?: Express.Multer.File,
-    ) {
+    ): Promise<ProductResponseDto> {
         const uploadedFilePath = file
             ? `/uploads/products/${file.filename}`
             : undefined;
-        return this.productsService.create(dto, uploadedFilePath);
+        return this.productsService.create(
+            dto,
+            uploadedFilePath,
+        ) as unknown as Promise<ProductResponseDto>;
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -121,11 +130,15 @@ export class ProductsController {
         @Param('id') id: string,
         @Body() dto: UpdateProductDto,
         @UploadedFile() file?: Express.Multer.File,
-    ) {
+    ): Promise<ProductResponseDto> {
         const uploadedFilePath = file
             ? `/uploads/products/${file.filename}`
             : undefined;
-        return this.productsService.update(id, dto, uploadedFilePath);
+        return this.productsService.update(
+            id,
+            dto,
+            uploadedFilePath,
+        ) as unknown as Promise<ProductResponseDto>;
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -161,7 +174,9 @@ export class ProductsController {
     @ApiResponse({ status: 401, description: 'Неавторизован' })
     @ApiResponse({ status: 403, description: 'Доступ запрещен' })
     @ApiResponse({ status: 404, description: 'Товар не найден' })
-    async restore(@Param('id') id: string) {
-        return this.productsService.restore(id);
+    async restore(@Param('id') id: string): Promise<ProductResponseDto> {
+        return (await this.productsService.restore(
+            id,
+        )) as unknown as ProductResponseDto;
     }
 }

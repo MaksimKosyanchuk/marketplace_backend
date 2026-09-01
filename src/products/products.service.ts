@@ -16,7 +16,7 @@ interface ProductWithCategory {
     id: string;
     name: string;
     description: string;
-    price: number;
+    price: any; // Изменили с number на any или Prisma.Decimal для совместимости с Prisma
     stock: number;
     imageUrl: string | null;
     isArchived: boolean;
@@ -96,7 +96,7 @@ export class ProductsService {
         ]);
 
         const result: PaginatedProductsResult = {
-            items: items as ProductWithCategory[],
+            items: items,
             meta: { total, page, limit, pageCount: Math.ceil(total / limit) },
         };
 
@@ -114,7 +114,7 @@ export class ProductsService {
             throw new NotFoundException('Product not found');
         }
 
-        return product as ProductWithCategory;
+        return product;
     }
 
     async create(dto: CreateProductDto, uploadedFilePath?: string) {

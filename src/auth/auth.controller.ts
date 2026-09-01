@@ -27,9 +27,9 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 interface RequestWithCookies extends Request {
-    cookies?: {
+    cookies: {
         refreshToken?: string;
-    };
+    } & Record<string, any>;
 }
 
 @ApiTags('Auth')
