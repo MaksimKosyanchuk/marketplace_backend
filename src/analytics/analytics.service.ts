@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 
 export interface DateFilterDto {
     from?: string;
@@ -14,7 +14,6 @@ export class AnalyticsService {
     constructor(private readonly prisma: PrismaService) {}
 
     private getPaidStatuses(): OrderStatus[] {
-        // Включаем NEW и остальные оплаченные/выполняемые статусы
         return [
             OrderStatus.NEW,
             OrderStatus.PROCESSING,
@@ -23,18 +22,24 @@ export class AnalyticsService {
         ];
     }
 
-    private buildDateFilter(from?: string, to?: string) {
-        const filter: Record<string, any> = {};
-        if (from || to) {
-            filter.createdAt = {};
-            if (from) {
-                filter.createdAt.gte = new Date(`${from}T00:00:00.000Z`);
-            }
-            if (to) {
-                filter.createdAt.lte = new Date(`${to}T23:59:59.999Z`);
-            }
+    private buildDateFilter(
+        from?: string,
+        to?: string,
+    ): Prisma.OrderWhereInput {
+        if (!from && !to) {
+            return {};
         }
-        return filter;
+
+        const createdAtFilter: Prisma.DateTimeFilter = {};
+
+        if (from) {
+            createdAtFilter.gte = new Date(`${from}T00:00:00.000Z`);
+        }
+        if (to) {
+            createdAtFilter.lte = new Date(`${to}T23:59:59.999Z`);
+        }
+
+        return { createdAt: createdAtFilter };
     }
 
     private formatDateToLocal(date: Date): string {
@@ -87,11 +92,10 @@ export class AnalyticsService {
             productId: item.productId,
             productName: item.productName,
             totalSold: item._sum.quantity || 0,
-            totalRevenue:
-                Number(item._sum.price || 0) * (item._sum.quantity || 0),
+            totalRevenue: Number(item._sum.price || 0),
         }));
 
-        // 3. Sales Timeline (с учетом часового пояса Europe/Kyiv)
+        // 3. Sales Timeline
         const orders = await this.prisma.order.findMany({
             where: {
                 ...dateFilter,

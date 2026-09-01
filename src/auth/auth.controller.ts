@@ -8,46 +8,78 @@ import {
     UnauthorizedException,
     UseGuards,
 } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiBearerAuth,
+    ApiCookieAuth,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import {
+    AuthTokenResponseDto,
+    UserProfileResponseDto,
+} from './dto/auth-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
     constructor(private readonly authService: AuthService) {}
 
     @Post('register')
+    @ApiOperation({ summary: 'Регистрация нового пользователя' })
+    @ApiResponse({
+        status: 201,
+        description:
+            'Пользователь успешно зарегистрирован. Возвращает accessToken и устанавливает refreshToken в HttpOnly cookie.',
+        type: AuthTokenResponseDto,
+    })
+    @ApiResponse({ status: 400, description: 'Невалидные данные (Ошибка валидации DTO)' })
+    @ApiResponse({ status: 409, description: 'Пользователь с таким email уже существует' })
     async register(
         @Body() dto: RegisterDto,
         @Res({ passthrough: true }) res: Response,
     ) {
         const tokens = await this.authService.register(dto);
-
         this.setRefreshTokenCookie(res, tokens.refreshToken);
-
-        return {
-            accessToken: tokens.accessToken,
-        };
+        return { accessToken: tokens.accessToken };
     }
 
     @Post('login')
+    @ApiOperation({ summary: 'Авторизация пользователя' })
+    @ApiResponse({
+        status: 200,
+        description:
+            'Успешный вход. Возвращает accessToken и устанавливает refreshToken в HttpOnly cookie.',
+        type: AuthTokenResponseDto,
+    })
+    @ApiResponse({ status: 401, description: 'Неверный email или пароль' })
     async login(
         @Body() dto: LoginDto,
         @Res({ passthrough: true }) res: Response,
     ) {
         const tokens = await this.authService.login(dto);
-
         this.setRefreshTokenCookie(res, tokens.refreshToken);
-
-        return {
-            accessToken: tokens.accessToken,
-        };
+        return { accessToken: tokens.accessToken };
     }
 
     @Post('refresh')
+    @ApiCookieAuth('refreshToken')
+    @ApiOperation({ summary: 'Обновление пара токенов (Token Rotation)' })
+    @ApiResponse({
+        status: 200,
+        description: 'Токены успешно обновлены.',
+        type: AuthTokenResponseDto,
+    })
+    @ApiResponse({
+        status: 401,
+        description: 'Refresh token отсутствует в cookie или недействителен',
+    })
     async refresh(
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
@@ -59,16 +91,17 @@ export class AuthController {
         }
 
         const tokens = await this.authService.refresh(refreshToken);
-
-        // Новый refresh token после rotation
         this.setRefreshTokenCookie(res, tokens.refreshToken);
-
-        return {
-            accessToken: tokens.accessToken,
-        };
+        return { accessToken: tokens.accessToken };
     }
 
     @Post('logout')
+    @ApiCookieAuth('refreshToken')
+    @ApiOperation({ summary: 'Выход из системы (отзыв refresh токена)' })
+    @ApiResponse({
+        status: 200,
+        description: 'Успешный выход, cookie очищена',
+    })
     async logout(
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
@@ -88,6 +121,14 @@ export class AuthController {
 
     @UseGuards(JwtAuthGuard)
     @Get('me')
+    @ApiBearerAuth('JWT-auth')
+    @ApiOperation({ summary: 'Получение профиля текущего пользователя' })
+    @ApiResponse({
+        status: 200,
+        description: 'Данные текущего пользователя',
+        type: UserProfileResponseDto,
+    })
+    @ApiResponse({ status: 401, description: 'Неавторизован' })
     me(@Req() req: Request & { user: { id: string } }) {
         return this.authService.me(req.user.id);
     }

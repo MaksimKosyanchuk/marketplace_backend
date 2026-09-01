@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import cookieParser from 'cookie-parser';
@@ -7,6 +8,7 @@ import cookieParser from 'cookie-parser';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const port = process.env.PORT ?? 3000;
 
     app.enableCors({
         origin: [clientUrl],
@@ -26,7 +28,32 @@ async function bootstrap() {
 
     app.useGlobalFilters(new AllExceptionsFilter());
 
-    await app.listen(process.env.PORT ?? 3000);
-    console.log('started on port ' + (process.env.PORT ?? 3000));
+    const config = new DocumentBuilder()
+        .setTitle('Marketplace API')
+        .setDescription('API документация маркетплейса')
+        .setVersion('1.0')
+        .addBearerAuth(
+            {
+                type: 'http',
+                scheme: 'bearer',
+                bearerFormat: 'JWT',
+                name: 'JWT',
+                description: 'Введите JWT токен',
+                in: 'header',
+            },
+            'JWT-auth', // Название схемы для декоратора @ApiBearerAuth('JWT-auth')
+        )
+        .build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+        swaggerOptions: {
+            persistAuthorization: true, // Сохраняет токен при перезагрузке страницы
+        },
+    });
+
+    await app.listen(port);
+    console.log(`🚀 Server started on port ${port}`);
+    console.log(`📚 Swagger docs available at http://localhost:${port}/api/docs`);
 }
 bootstrap();
