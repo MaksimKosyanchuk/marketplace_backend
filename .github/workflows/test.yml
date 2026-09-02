@@ -59,7 +59,16 @@ jobs:
           JWT_REFRESH_SECRET: test_jwt_refresh_secret_key_12345
         run: npx prisma migrate deploy
 
-      - name: Run tests
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/marketplace?schema=public
+          REDIS_HOST: localhost
+          PORT: 3001
+          JWT_ACCESS_SECRET: test_jwt_access_secret_key_12345
+          JWT_REFRESH_SECRET: test_jwt_refresh_secret_key_12345
+        run: npm run test
+
+      - name: Run E2E tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/marketplace?schema=public
           REDIS_HOST: localhost
